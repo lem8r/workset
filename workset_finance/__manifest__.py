@@ -14,8 +14,10 @@
     'license': 'LGPL-3',
     'category': 'Accounting',
     # 19.0.1.1.0 (круг 2) — екран «Власник» (client action, ассети), меню «Власник» першим, переклад ru.po; 19.0.1.2.0 (круг 3) — період
-    # екрана (місяць / рік / свій від місяця до місяця), клікабельно все, колонка «№» у списках карток
-    'version': '19.0.1.2.0',
+    # екрана (місяць / рік / свій від місяця до місяця), клікабельно все, колонка «№» у списках карток; 19.0.1.3.0 (круг 3б) — колонка «№»
+    # у списках Odoo (віджет row_number, свої primary-види рядків проводок, аналітики й рахунків для кліків), «не оплачено» — на сьогодні;
+    # моделі й поля ті самі — після -u перерахунок не потрібен
+    'version': '19.0.1.3.0',
     # workset_rates — периметр фірм (_skip_companies) і лінії (workset.line); account, analytic — проводки й аналітика; hr — розділ кадрів
     # форми користувача для привілею; mail — листування поправок; web (Chart.js екрана) — через account
     'depends': ['workset_rates', 'account', 'hr', 'analytic', 'mail'],
@@ -36,6 +38,9 @@
             'workset_finance/static/src/scss/workset_finance.scss',
             'workset_finance/static/src/js/finance_screens.js',
             'workset_finance/static/src/xml/finance_screens.xml',
+            # круг 3б: колонка «№» списків Odoo (перенесено з М3 під своїм іменем: цей JS + шаблон)
+            'workset_finance/static/src/js/row_number.js',
+            'workset_finance/static/src/xml/row_number.xml',
         ],
     },
     'installable': True,

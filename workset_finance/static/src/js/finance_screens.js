@@ -280,8 +280,9 @@ export class FinanceOwner extends Component {
         return this.data.period.kind === kind ? "active" : "";
     }
 
-    /** Список за описом сервера: модель, заголовок, домен, контекст (без «Створити»); є res_id — форма одного запису; опис {dialog} — вікно
-     *  «три кошики» якості даних з тієї самої відповіді. */
+    /** Список за описом сервера: модель, заголовок, домен, контекст (без «Створити»); є res_id — форма одного запису; є views (круг 3б:
+     *  стандартна модель — свій список із колонкою «№») — ці види, інакше штатні; опис {dialog} — вікно «три кошики» якості даних з тієї
+     *  самої відповіді. */
     openList(spec) {
         if (!spec) {
             return;
@@ -294,16 +295,15 @@ export class FinanceOwner extends Component {
             return;
         }
         const form = Boolean(spec.res_id);
+        const views = spec.views || [
+            [false, "list"],
+            [false, "form"],
+        ];
         this.action.doAction({
             type: "ir.actions.act_window",
             name: spec.title,
             res_model: spec.model,
-            views: form
-                ? [[false, "form"]]
-                : [
-                      [false, "list"],
-                      [false, "form"],
-                  ],
+            views: form ? [[false, "form"]] : views,
             ...(form ? { res_id: spec.res_id } : {}),
             domain: spec.domain,
             context: spec.context || {},
@@ -311,11 +311,12 @@ export class FinanceOwner extends Component {
         });
     }
 
-    /** «Прибутковість ліній →» за тим самим місяцем (екран «Огляд» М3; посилання є, лише коли модуль установлено й є доступ — сервер). */
+    /** «Прибутковість ліній →» за тим самим періодом (екран «Огляд» М3 приймає params.span — місяць, рік, «з–по»; month — для старого М3
+     *  без span; посилання є, лише коли модуль установлено й є доступ — сервер). */
     openProfit() {
         const p = this.data.aside && this.data.aside.profit;
         if (p) {
-            this.action.doAction({ type: "ir.actions.client", tag: p.tag, name: p.name, params: { month: p.month } });
+            this.action.doAction({ type: "ir.actions.client", tag: p.tag, name: p.name, params: { month: p.month, span: p.span } });
         }
     }
 

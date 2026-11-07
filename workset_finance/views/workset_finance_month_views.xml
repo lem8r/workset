@@ -13,6 +13,8 @@
                             groups="workset_finance.group_editor,base.group_system"/>
                 </header>
                 <field name="currency_id" column_invisible="1"/>
+                <!-- круг 3б: «№» — номер рядка на екрані (віджет static/src/js/row_number.js), не id; правило власника 07.11 -->
+                <field name="id" string="№" widget="workset_finance_row_number" readonly="1" width="50px"/>
                 <field name="month" widget="date" options="{'numeric': True}"/>
                 <field name="state"/>
                 <field name="s1_docs" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>

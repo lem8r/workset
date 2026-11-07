@@ -17,12 +17,14 @@ workset_finance). Усі дані — вигадані в самому тест�
 Круг 1г: тести з фірмою поза периметром («Test firm Out», дописується в workset_rates.out_of_perimeter_company_ids у самому тесті) — її рядки
 в ступені не входять, її партнер — окремий кошик, не «міжфірмові»."""
 import json
+import re
 
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests.common import TransactionCase, new_test_user, tagged
 from odoo.tools import SQL
 
 from ..models import calc
+from ..models.workset_finance_screens import CLICK_VIEWS
 
 M = '2030-03-01'
 M_LAST = '2030-03-31'
@@ -869,14 +871,31 @@ class TestWorksetFinance(TransactionCase):
         """Сума записів, які відкриває клік (поле field; рядки виписки й проводки — balance через _records)."""
         return sum(self._records(spec).mapped(field))
 
+    def _feb_extra(self):
+        """Круг 3б (ревю 3): лютий не порожній для якості даних і «Власників» — інакше тест періоду пройшов би, якби екран узяв лише березень.
+        Рахунок зовнішньому замовнику 70 на статті іншого плану (оборот 70, «без місця» 70), міжфірмовий рахунок 12 (на партнера фірми U,
+        частка рекрутингу), рядки аналітики власника −4 і «частки» −2. Лютий: якість (12 + 70) / 70, березень — (35 + 83) / 183."""
+        self._invoice(self.cust3, 70, '2030-02-10', {str(self.a_other.id): 100})
+        self._invoice(self.co_ua.partner_id, 12, '2030-02-11', {str(self.a_node_a.id): 100})
+        self._aal(self.co, self.a_owner, -4, self.expense, day='2030-02-14')
+        self._aal(self.co, self.a_share, -2, self.expense, day='2030-02-14')
+
+    def _pay(self, invoice, amount, day='2030-04-05'):
+        """Оплата рахунку клієнта (банк і звірка з рядком дебіторки) — після перерахунку місяця."""
+        pay = self._entry(self.co, day, [{'account_id': self.cash.id, 'debit': amount},
+                                         {'account_id': self.recv.id, 'credit': amount, 'partner_id': invoice.commercial_partner_id.id}])
+        (invoice.line_ids | pay.line_ids).filtered(lambda x: x.account_id == self.recv and not x.reconciled).reconcile()
+
     def test_owner_screen_period_year_and_range(self):
         """Рік і свій період: плитки = Σ місяців, «з початку року» немає (підпис «за N міс.»), «Разом» таблиці = плиткам, водоспад сходиться до
-        Σ s4_net, частка якості даних = Σ кошиків / Σ обороту (як MC.truthShare по сумах); період з одного місяця — числа місяця; старий виклик
-        місяцем = період «місяць»."""
+        Σ s4_net, частка якості даних = Σ кошиків / Σ обороту (як MC.truthShare по сумах) і ≠ частці березня (лютий не порожній, _feb_extra);
+        період з одного місяця — числа місяця; старий виклик місяцем = період «місяць»."""
         self._adjust('s3', 20, line_id=self.line.id)
         self._adjust('s1g', 5)
+        self._feb_extra()
         self._run((FEB, M))
         feb, mar = self._month(FEB), self._month(M)
+        self.assertEqual(self._r(feb.q_ic, feb.q_unplaced, feb.q_ext), [12, 70, 70], 'передумова: у лютому кошики й оборот не нульові')
         year = self._owner({'kind': 'year', 'from': '2030'})
         rng = self._owner({'kind': 'range', 'from': '2030-02', 'to': '2030-03'})
         for data in (year, rng):
@@ -900,10 +919,14 @@ class TestWorksetFinance(TransactionCase):
         self.assertEqual((year['period']['kind'], year['period']['from'], year['period']['to'], year['period']['anchor']), ('year', '2030-01', '2030-12', '2030-03'))
         self.assertEqual(year['period']['title_in'], calc.t('p_year', self.Month._lang()) % '2030')
         self.assertEqual([y['value'] for y in year['years']], ['2030'])
-        # якість даних за період: Σ кошиків (зі знаком, як MC.truthShare по сумах) / Σ обороту
+        # якість даних за період: Σ кошиків (зі знаком, як MC.truthShare по сумах) / Σ обороту; не частка березня й не середнє місяців
         q = {c['key']: c for c in rng['chips']}['quality']
         share = calc.truth_share(feb.q_ic + mar.q_ic, feb.q_unplaced + mar.q_unplaced, feb.q_nodoc + mar.q_nodoc, feb.q_ext + mar.q_ext)
-        self.assertEqual((q['pct'], q['parts']), (share['share'], share['parts']))
+        self.assertEqual((q['pct'], q['parts'], q['ext']), (share['share'], share['parts'], 253))
+        self.assertEqual(q['pct'], round((47 + 153) / 253 * 100, 1), '(12 + 35 + 70 + 83) / (70 + 183)')
+        self.assertNotEqual(q['pct'], mar.q_pct, 'частка лютий — березень ≠ частці березня')
+        self.assertNotEqual(q['pct'], round((feb.q_pct + mar.q_pct) / 2, 1), 'і не середнє часток місяців')
+        self.assertEqual({c['key']: c for c in year['chips']}['quality']['pct'], q['pct'], 'рік 2030 — ті самі два місяці')
         # період з одного місяця — числа й частка якості місяця
         one = self._owner({'kind': 'range', 'from': '2030-03', 'to': '2030-03'})
         month = self._owner(M)
@@ -920,21 +943,32 @@ class TestWorksetFinance(TransactionCase):
         self.assertFalse(self._owner({'kind': 'year', 'from': '2031'})['has'])
 
     def test_owner_screen_period_refusals(self):
-        """Відмова: раніше за січень 2026 (місяць, рік, межа періоду), «від» пізніше за «до», більше 36 місяців, вид чи формат не розібрати."""
+        """Відмова: раніше за січень 2026 (місяць, рік, межа періоду — текст про період, круг 3б), «від» пізніше за «до», більше 36 місяців,
+        вид чи формат не розібрати — кожна своїм текстом (calc.TX; мова — будь-яка з двох)."""
         self._run()
-        for bad in ('2025-12-01', {'kind': 'year', 'from': '2025'}, {'kind': 'range', 'from': '2025-12', 'to': '2026-02'},
-                    {'kind': 'range', 'from': '2030-03', 'to': '2030-02'}, {'kind': 'range', 'from': '2026-01', 'to': '2029-01'},
-                    {'kind': 'week', 'from': '2030-03'}, {'kind': 'range', 'from': '2030-13', 'to': '2031-01'}):
-            with self.assertRaises(ValidationError, msg=str(bad)):
+        early = r'Період раніше 2026-01: %s|Период раньше 2026-01: %s'
+        cases = (('2025-12-01', early % ('2025-12', '2025-12')), ({'kind': 'year', 'from': '2025'}, early % ('2025-01', '2025-01')),
+                 ({'kind': 'range', 'from': '2025-12', 'to': '2026-02'}, early % ('2025-12', '2025-12')),
+                 ({'kind': 'range', 'from': '2030-03', 'to': '2030-02'}, r'«від» 2030-03 пізніше за «до» 2030-02|«от» 2030-03 позже, чем «до» 2030-02'),
+                 ({'kind': 'range', 'from': '2026-01', 'to': '2029-01'}, r'Період — 37 міс\., а можна не більше 36|Период — 37 мес\., а можно не больше 36'),
+                 ({'kind': 'week', 'from': '2030-03'}, r'Період не розібрано|Период не разобран'),
+                 ({'kind': 'range', 'from': '2030-13', 'to': '2031-01'}, r'Період не розібрано|Период не разобран'))
+        for bad, text in cases:
+            with self.assertRaisesRegex(ValidationError, text, msg=str(bad)):
                 self._owner(bad)
+        with self.assertRaises(ValidationError) as cm:
+            self._owner('2025-12-01')
+        self.assertNotIn('2025-12-01', str(cm.exception), 'не «Місяць 2025-12-01»: межа періоду — «РРРР-ММ»')
         self.assertEqual(len(self._owner({'kind': 'range', 'from': '2026-01', 'to': '2028-12'})['period']['from']), 7, '36 місяців — можна')
 
     def test_owner_screen_period_clicks_sum_to_numbers(self):
         """Клікабельно все за період (лютий + березень): плитки й «з початку року», стовпці водоспаду, «Разом», чипи (не закрито, звірка, якість —
         кошики, поправки, перераховано), «Власники» (підсумок, рядок, частка), «Перекази» (одержувач за два місяці — один рядок), «Окремо від
-        прибутку» — сума списку = числу."""
+        прибутку» — сума списку = числу. Круг 3б: лютий не порожній (_feb_extra) — кошики й «Власники» склеюють записи двох місяців у Python
+        (_group_open / _ids_open → calc.merge_domain), а не лише в node."""
         self._adjust('s3', 20, line_id=self.line.id)
         self._adjust('s3', 7, month=FEB, line_id=self.line.id)
+        self._feb_extra()
         eur_bank = self._bank_journal('TBE')
         self.env['ir.config_parameter'].sudo().set_param(calc.P_PREFIX + 'transfer_phrases', json.dumps(['na konto osobiste']))
         st_feb = self._st(eur_bank, -30, 'Przelew na konto osobiste', day='2030-02-05')
@@ -973,8 +1007,11 @@ class TestWorksetFinance(TransactionCase):
         # березня — один кошик, обидва рядки виписки
         baskets = {b['key']: b for b in chips['quality']['baskets']}
         self.assertEqual(set(baskets), {'ic', 'unplaced', 'nodoc:noPartner'})
+        self.assertEqual(self._r(baskets['ic']['amount'], baskets['unplaced']['amount']), [12 + 35, 70 + 83], 'кошики — обидва місяці')
         for key in ('ic', 'unplaced'):
-            self.assertAlmostEqual(-sum(self._records(baskets[key]['open']).mapped('balance')), baskets[key]['amount'], msg='кошик = записи: %s' % key)
+            recs = self._records(baskets[key]['open'])
+            self.assertAlmostEqual(-sum(recs.mapped('balance')), baskets[key]['amount'], msg='кошик = записи: %s' % key)
+            self.assertEqual({d.month for d in recs.mapped('date')}, {2, 3}, 'у списку кошика — записи обох місяців: %s' % key)
         nodoc = baskets['nodoc:noPartner']
         self.assertEqual(self._records(nodoc['open']), st_feb | st_mar)
         self.assertAlmostEqual(-self._amount_of(nodoc['open']), nodoc['amount'])
@@ -983,23 +1020,102 @@ class TestWorksetFinance(TransactionCase):
         self.env['workset.finance.check'].search([('month', '=', FEB)]).write({'ok': False})
         bad = {c['key']: c for c in self._owner({'kind': 'range', 'from': '2030-02', 'to': '2030-03'})['chips']}['check']
         self.assertEqual((bad['ok'], bad['bad']), (False, 1))
-        # «Власники»: підсумок = рядки деталі, рядок і «частка» — рядки аналітики
+        # «Власники»: підсумок = рядки деталі, рядок, «частка» й «витрати компанії» — рядки аналітики обох місяців (два рядки деталі на статтю
+        # — домени місяців через «АБО», calc.merge_domain)
         own = data['owners']
         self.assertAlmostEqual(own['total'], feb.s5_owners + mar.s5_owners)
+        self.assertEqual(self._r(feb.s5_owners, mar.s5_owners), [6, 16], 'передумова: власник є в обох місяцях')
         self.assertAlmostEqual(self._amount_of(own['open']), own['total'])
         share = next(o for o in own['rows'] if o['share'])
-        self.assertAlmostEqual(-self._amount_of(share['share_open']), share['share'], msg='«частка» — свої рядки аналітики')
+        self.assertEqual((share['share'], len(share['share_ids'])), (8, 2), '«частка» 2 + 6 — по рядку деталі на місяць')
+        self.assertAlmostEqual(-self._amount_of(share['share_open']), share['share'], msg='«частка» — свої рядки аналітики обох місяців')
+        company = next(o for o in own['rows'] if o['company'])
+        self.assertEqual((company['company'], len(company['company_ids'])), (14, 2), '«витрати компанії» 4 + 10')
+        self.assertAlmostEqual(-self._amount_of(company['company_open']), company['company'], msg='«витрати компанії» — рядки аналітики обох місяців')
+        self.assertAlmostEqual(-self._amount_of(company['open']), company['total'], msg='рядок власника — його рядки аналітики обох місяців')
+        self.assertEqual({d.month for d in self._records(company['company_open']).mapped('date')}, {2, 3})
         # «Перекази»: одержувач без партнера за два місяці — один рядок, сума = рядки виписки обох місяців
         tr = data['transfers']
         self.assertEqual([(r['amount'], r['status']) for r in tr['rows']], [(80, 'nodoc')])
         self.assertEqual(self._records(tr['rows'][0]['open']), st_feb | st_mar)
         self.assertAlmostEqual(self._amount_of(tr['open']), 80)
-        # «Окремо від прибутку»: II етап (аналітика й рахунок — рядки деталі), неоплачене — рахунки, «на ДД.ММ»
+        # «Окремо від прибутку»: II етап (аналітика й рахунок — рядки деталі), неоплачене — рахунки на сьогодні (круг 3б)
         aside = {a['key']: a for a in data['aside']['rows']}
         self.assertAlmostEqual(aside['stage2']['amount'], feb.s6_stage2 + mar.s6_stage2)
         self.assertAlmostEqual(self._amount_of(aside['stage2']['open']), aside['stage2']['amount'])
         self.assertEqual(self._records(aside['customers']['open']), self.inv_cust)
-        self.assertRegex(aside['customers']['asof'], r'\d{2}\.\d{2}', 'неоплачене — на дату перерахунку')
+        self.assertAlmostEqual(self._amount_of(aside['customers']['open'], 'amount_residual'), aside['customers']['amount'])
+        self.assertEqual(aside['customers']['asof'], calc.t('p_today', self.Month._lang()), 'неоплачене — на сьогодні')
+
+    # ——— круг 3б: правки ревю круга 3 ———
+    def test_owner_screen_unpaid_today_after_payment(self):
+        """«Не оплачено» — залишок тих самих рахунків на сьогодні, а не на день перерахунку (ревю 3: рахунок березня, оплачений пізніше, при
+        вже не перераховуваному березні давав число ≠ списку): оплатили частину після перерахунку — число зменшилось і = сумі списку кліку;
+        оплатили цілком — рядка немає; підпис «на сьогодні». Без права читати рахунки — збережене число з датою перерахунку, без кліку."""
+        self._run()
+        lang = self.Month._lang()
+        before = {a['key']: a for a in self._owner()['aside']['rows']}
+        self.assertEqual(self._r(before['customers']['amount'], before['energy']['amount']), [100, 20])
+        self._pay(self.inv_cust, 30)
+        self._pay(self.inv_energy, 20)
+        self.assertEqual((self.inv_cust.amount_residual, self.inv_energy.payment_state in calc.UNPAID_SKIP), (70, True),
+                         'передумова: оплачено після перерахунку')
+        self.assertAlmostEqual(self._month().s7_unpaid_customers, 100, msg='збережене число березня те саме — місяць не перераховували')
+        for data in (self._owner(), self._owner({'kind': 'range', 'from': '2030-02', 'to': '2030-03'})):
+            aside = {a['key']: a for a in data['aside']['rows']}
+            self.assertNotIn('energy', aside, 'рахунок Energy оплачено цілком — рядка немає')
+            cust = aside['customers']
+            self.assertAlmostEqual(cust['amount'], 70, msg='на сьогодні: 100 − 30 (збережене — 100)')
+            self.assertEqual(cust['asof'], calc.t('p_today', lang))
+            self.assertEqual(self._records(cust['open']), self.inv_cust)
+            self.assertAlmostEqual(self._amount_of(cust['open'], 'amount_residual'), cust['amount'], msg='число = сумі списку')
+            self.assertEqual(cust['open']['context'].get('default_move_type'), 'out_invoice', 'список — як «Рахунки» клієнтів Odoo')
+        # без права читати рахунки — як до круга 3б: збережений залишок «на ДД.ММ» (день перерахунку), без кліку
+        co = {'company_id': self.co.id, 'company_ids': [(6, 0, self.cos)]}
+        owner = new_test_user(self.env, login='fin_owner_unpaid', groups='base.group_user,workset_finance.group_owner', **co)
+        self.assertFalse(self.env['account.move'].with_user(owner).has_access('read'), 'передумова: прав на рахунки немає')
+        plain = {a['key']: a for a in self.Month.with_user(owner).finance_owner(M)['aside']['rows']}
+        self.assertEqual(self._r(plain['customers']['amount'], plain['energy']['amount']), [100, 20])
+        self.assertRegex(plain['customers']['asof'], r'^\S+ \d{2}\.\d{2}$')
+        self.assertFalse(plain['customers']['open'])
+        # чиста функція: правила _unpaid перерахунку — повернення мінусом, оплачені, сторновані, чернетки й залишок до UNPAID_MIN — поза
+        got = calc.unpaid_now([{'id': 3, 'move_type': 'out_invoice', 'state': 'posted', 'payment_state': 'partial', 'amount_residual': 70},
+                               {'id': 1, 'move_type': 'out_refund', 'state': 'posted', 'payment_state': 'not_paid', 'amount_residual': 5},
+                               {'id': 2, 'move_type': 'out_invoice', 'state': 'posted', 'payment_state': 'paid', 'amount_residual': 0},
+                               {'id': 4, 'move_type': 'out_invoice', 'state': 'cancel', 'payment_state': 'not_paid', 'amount_residual': 9},
+                               {'id': 5, 'move_type': 'out_invoice', 'state': 'posted', 'payment_state': 'not_paid', 'amount_residual': 0.004}])
+        self.assertEqual(got, {'cents': 6500, 'ids': [1, 3]})
+
+    def test_every_list_view_has_row_number(self):
+        """Колонка «№» (правило власника 07.11: «номер: оставить … всегда можно сказать вопрос по номеру 3»): у кожного list-виду моделей
+        модуля перша видима колонка — поле id з віджетом workset_finance_row_number; клік екрана, що відкриває стандартну модель (рядки
+        аналітики, проводок, рахунки), — свій список від штатного (primary) з «№» за посиланням 'views'; штатний список моделі за замовчуванням
+        — не наш і без «№» (не зламано). Свої моделі — штатний (свій) список, без 'views'."""
+        first = re.compile(r'<field name="(\w+)"(?![^>]*column_invisible)')
+        widget = 'widget="workset_finance_row_number"'
+        for model in ('workset.finance.month', 'workset.finance.item', 'workset.finance.adjust', 'workset.finance.check'):
+            arch = self.env[model].get_views([(False, 'list')])['views']['list']['arch']
+            self.assertIn(widget, arch, '%s: у списку немає «№»' % model)
+            self.assertEqual(first.search(arch).group(1), 'id', '%s: «№» — перша видима колонка' % model)
+        ids = {}
+        for model, xid in CLICK_VIEWS.items():
+            view = self.env.ref(xid)
+            ids[model] = view.id
+            self.assertEqual((view.model, view.mode, view.priority), (model, 'primary', 99), xid)
+            arch = self.env[model].get_views([(view.id, 'list')])['views']['list']['arch']
+            self.assertIn(widget, arch, xid)
+            self.assertEqual(first.search(arch).group(1), 'id', '%s: «№» — перша видима колонка' % xid)
+            default = self.env[model].get_views([(False, 'list')])['views']['list']
+            self.assertNotEqual(default['id'], view.id, '%s: штатний список за замовчуванням не підмінено' % model)
+            self.assertNotIn(widget, default['arch'], '%s: у штатному списку «№» немає' % model)
+        self._run()
+        specs = list(self._specs(self._owner()))
+        self.assertTrue(set(CLICK_VIEWS) | {'workset.finance.item'} <= {s['model'] for s in specs}, 'передумова: є кліки всіх видів')
+        for spec in specs:
+            if spec['model'] in CLICK_VIEWS and not spec.get('res_id'):
+                self.assertEqual(spec['views'], [[ids[spec['model']], 'list'], [False, 'form']], spec['title'])
+            else:
+                self.assertNotIn('views', spec, spec['title'])
 
     def test_closed_takes_parent_company_lock_date(self):
         Company = self.env['res.company']

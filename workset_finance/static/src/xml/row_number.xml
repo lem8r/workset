@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <!-- колонка «№» списків Odoo (static/src/js/row_number.js): сірим, номер — місце рядка на екрані -->
+    <t t-name="workset_finance.RowNumber">
+        <span class="text-muted" t-esc="number"/>
+    </t>
+</templates>

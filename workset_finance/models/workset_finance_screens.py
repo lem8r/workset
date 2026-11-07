@@ -18,11 +18,15 @@ workset_finance.owner (static/src/js/finance_screens.js) — ОДИН викли
 «АБО», calc.or_domains).
 
 Круг 3 (слово власника 07.11 «экран: принимаю, только все должно быть кликабельно и также периоды должны быть»): усе на екрані — за обраним
-періодом (calc.parse_period): плитки, водоспад, «Власники», «Перекази», «Окремо від прибутку», чипи — Σ місяців періоду (calc.period_sum,
-неоплачене — залишок на дату перерахунку свого місяця, підпис «на ДД.ММ»); таблиця й графік — місяці періоду (місяць — січень … він сам, як
-круг 2б). Клікабельно все: плитки (і «з початку року»), стовпці водоспаду, рядки й підсумки карток, «частка» й «витрати компанії», чипи
-(«не закрито» — місяці, звірка — звірки періоду, якість — три кошики періоду, поправки — поправки періоду, «перераховано» — місяці);
-рядки кількох місяців — одним списком записів (calc.merge_items, calc.merge_domain)."""
+періодом (calc.parse_period): плитки, водоспад, «Власники», «Перекази», «Окремо від прибутку», чипи — Σ місяців періоду (calc.period_sum);
+таблиця й графік — місяці періоду (місяць — січень … він сам, як круг 2б). Клікабельно все: плитки (і «з початку року»), стовпці
+водоспаду, рядки й підсумки карток, «частка» й «витрати компанії», чипи («не закрито» — місяці, звірка — звірки періоду, якість — три
+кошики періоду, поправки — поправки періоду, «перераховано» — місяці); рядки кількох місяців — одним списком записів (calc.merge_items,
+calc.merge_domain).
+
+Круг 3б (ревю 3): «не оплачено» — залишок тих самих рахунків на сьогодні (_unpaid_now, лише читання, підпис «на сьогодні»; без права
+читати рахунки — збережений на дату перерахунку, «на ДД.ММ»); клік стандартної моделі — свій список із колонкою «№» (CLICK_VIEWS);
+«Прибутковість ліній →» — за обраним періодом."""
 import json
 
 from odoo import api, fields, models
@@ -42,6 +46,14 @@ PROFIT_MODEL = 'workset.profit.month'                        # «Прибутк�
 PROFIT_GROUP = 'workset_profit.group_viewer'
 PROFIT_TAG = 'workset_profit.overview'
 CLICK_COS = 'workset_finance_click_cos'   # ключ контексту: фірми списку кліку (calc.click_companies), рахуються раз на виклик екрана
+# круг 3б (правило власника 07.11 — «№» у кожному списку): клік, що відкриває стандартну модель, — свій список від штатного з колонкою «№»
+# (views/workset_finance_screens_views.xml, priority 99 — штатний вид моделі за замовчуванням не змінюється); моделі тут немає — штатний вид
+CLICK_VIEWS = {
+    'account.move.line': 'workset_finance.view_click_move_line_list',
+    'account.analytic.line': 'workset_finance.view_click_analytic_line_list',
+    'account.move': 'workset_finance.view_click_move_list',
+}
+INVOICE_CTX = {'default_move_type': 'out_invoice'}   # список рахунків клієнтів, як меню «Рахунки» Odoo: видно «Клієнт» і «Дата рахунку»
 
 
 class WorksetFinanceScreens(models.Model):
@@ -51,7 +63,8 @@ class WorksetFinanceScreens(models.Model):
     def _open(self, title, model, domain=None, record=None, context=None):
         """Опис списку для кліку: модель, заголовок, домен, контекст без «Створити» (екран лише показує) і з allowed_company_ids — фірми
         периметра, доступні користувачу (CLICK_COS; інакше список бачив би лише фірми, відмічені в перемикачі); record — id одного запису
-        (форма). Моделі немає або права читання в користувача немає — False (число без кліку)."""
+        (форма). Моделі немає або права читання в користувача немає — False (число без кліку). Стандартна модель (CLICK_VIEWS, круг 3б) —
+        ще 'views': свій список із колонкою «№» і штатна форма."""
         if not model or model not in self.env or not self.env[model].has_access('read'):
             return False
         ctx = {'create': False}
@@ -61,7 +74,23 @@ class WorksetFinanceScreens(models.Model):
         out = {'model': model, 'title': title, 'domain': domain or [], 'context': dict(ctx, **(context or {}))}
         if record:
             out['res_id'] = record
+        view = not record and model in CLICK_VIEWS and self.env.ref(CLICK_VIEWS[model], raise_if_not_found=False)
+        if view:
+            out['views'] = [[view.id, 'list'], [False, 'form']]
         return out
+
+    def _unpaid_now(self, ids):
+        """«Не оплачено» на сьогодні (круг 3б): рахунки, які перерахунок відніс до кошика (ids), — їхній залишок зараз за правилами
+        перерахунку (calc.unpaid_now: amount_residual, як _unpaid), правами користувача й по фірмах списку кліку (CLICK_COS) — число = списку
+        кліку (рахунок, оплачений після перерахунку, зникає з обох). Лише читання. Рядки кошика не з рахунків (ids None) чи немає права читати
+        рахунки — None: екран показує збережений залишок на дату перерахунку, як до круга 3б."""
+        Move = self.env['account.move']
+        if ids is None or not Move.has_access('read'):
+            return None
+        cos = self.env.context.get(CLICK_COS)
+        if cos:
+            Move = Move.with_context(allowed_company_ids=list(cos))
+        return calc.unpaid_now(Move.search_read([('id', 'in', ids)], ['move_type', 'state', 'payment_state', 'amount_residual']))
 
     def _click_companies(self):
         """Фірми списку кліку: периметр (як у перерахунку) ∩ фірми користувача, поточна — першою (calc.click_companies)."""
@@ -333,8 +362,9 @@ class WorksetFinanceScreens(models.Model):
             tr['open'] = self._open(t_tr, ITEM, [('month', 'in', pm), ('kind', '=', 'transfer')])
             out['transfers'] = tr
         # «Окремо від прибутку»: II етап (клік — рядки аналітики чи рядки рахунку; обидва види разом — рядки деталі), не оплачено замовниками
-        # й Energy (жовта крапка; назва групи — з Odoo, _energy_name; залишок — на дату перерахунку свого місяця, підпис «на ДД.ММ»);
-        # посилання — «Прибутковість ліній», якщо встановлена
+        # й Energy (жовта крапка; назва групи — з Odoo, _energy_name; круг 3б: залишок тих самих рахунків на сьогодні — _unpaid_now, підпис
+        # «на сьогодні»; без права читати рахунки — збережений на дату перерахунку свого місяця, «на ДД.ММ»); посилання — «Прибутковість
+        # ліній» за тим самим періодом, якщо встановлена
         aside = []
         if calc.cents(v['s6_stage2']):
             t_s2 = of % (calc.t('o_stage2', lang), title_in)
@@ -343,16 +373,29 @@ class WorksetFinanceScreens(models.Model):
             aside.append({'key': 'stage2', 'amount': v['s6_stage2'], 'asof': '',
                           'open': self._group_open(used[0], t_s2) if len(used) == 1 else self._open(t_s2, ITEM, [('id', 'in', [it['id'] for it in st2])])})
         for key, field, bucket in (('customers', 's7_unpaid_customers', 'customer'), ('energy', 's7_unpaid_energy', 'energy')):
-            if not calc.cents(v[field]):
-                continue
             mine = [it for it in items if it['kind'] == 'unpaid' and it['note'] == bucket]
+            if not mine and not calc.cents(v[field]):
+                continue
             ids = calc.ids_union([it['domain'] for it in mine]) if all(it['res_model'] == 'account.move' for it in mine) else None
             firm = (self._energy_name() or 'Energy') if key == 'energy' else ''
             title = of % (calc.t('o_unpaid_energy', lang) % firm if key == 'energy' else calc.t('o_unpaid_customer', lang), title_in)
-            asof = calc.asof_text([self._kyiv(r['recomputed_at'], '%Y-%m-%d') for r in prow if calc.cents(r[field])], lang)
-            aside.append({'key': key, 'amount': v[field], 'warn': key == 'energy', 'firm': firm, 'asof': asof,
-                          'open': self._open(title, 'account.move', [('id', 'in', ids)]) if ids else self._open(title, ITEM, [('id', 'in', [it['id'] for it in mine])])})
+            now = self._unpaid_now(ids)
+            if now is not None:
+                # на сьогодні: число й список — ті самі рахунки, що досі не оплачені
+                amount, asof = calc.eur(now['cents']), calc.t('p_today', lang)
+                spec = now['ids'] and self._open(title, 'account.move', [('id', 'in', now['ids'])], context=INVOICE_CTX)
+            else:
+                amount = v[field]
+                asof = calc.asof_text([self._kyiv(r['recomputed_at'], '%Y-%m-%d') for r in prow if calc.cents(r[field])], lang)
+                spec = self._open(title, 'account.move', [('id', 'in', ids)], context=INVOICE_CTX) if ids else self._open(
+                    title, ITEM, [('id', 'in', [it['id'] for it in mine])])
+            if not calc.cents(amount):
+                continue
+            aside.append({'key': key, 'amount': amount, 'warn': key == 'energy', 'firm': firm, 'asof': asof, 'open': spec or False})
         profit = PROFIT_MODEL in self.env and self.env.user.has_group(PROFIT_GROUP)
         if aside:
-            out['aside'] = {'rows': aside, 'profit': {'tag': PROFIT_TAG, 'name': calc.t('o_profit', lang), 'month': last} if profit else False}
+            # круг 3б: «Прибутковість ліній →» — за обраним періодом (М3 з 19.0.5 приймає params.span {kind, from, to}: місяць, рік, «з–по»);
+            # month — для старого М3 без span (останній місяць періоду)
+            span = {'kind': per['kind'], 'from': per['from'], 'to': per['to']}
+            out['aside'] = {'rows': aside, 'profit': {'tag': PROFIT_TAG, 'name': calc.t('o_profit', lang), 'month': last, 'span': span} if profit else False}
         return out

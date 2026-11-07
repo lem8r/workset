@@ -7,6 +7,8 @@
         <field name="arch" type="xml">
             <list string="Рядки" create="0" edit="0" delete="0" default_order="month desc, kind, sort">
                 <field name="currency_id" column_invisible="1"/>
+                <!-- круг 3б: «№» — номер рядка на екрані, у згрупованому списку — з 1 у кожній групі -->
+                <field name="id" string="№" widget="workset_finance_row_number" readonly="1" width="50px"/>
                 <field name="month" widget="date" options="{'numeric': True}"/>
                 <field name="kind"/>
                 <field name="name"/>
