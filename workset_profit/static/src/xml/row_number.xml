@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <!-- колонка «№» списков (static/src/js/row_number.js): серым, узко, цифры одной ширины -->
+    <t t-name="workset_profit.RowNumber">
+        <span class="o_workset_profit_rownum text-muted" t-esc="number"/>
+    </t>
+</templates>

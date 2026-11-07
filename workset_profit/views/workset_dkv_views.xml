@@ -7,7 +7,9 @@
         <field name="model">workset.dkv.card</field>
         <field name="arch" type="xml">
             <list string="Картки DKV" decoration-muted="not active" default_order="seq, number">
+                <!-- скрыто: поле нужно для decoration-muted="not active" -->
                 <field name="active" column_invisible="1"/>
+                <field name="id" string="№" widget="workset_profit_row_number" readonly="1" width="50px"/>
                 <field name="seq"/>
                 <field name="number"/>
                 <field name="vehicle_id" optional="show"/>
@@ -30,6 +32,7 @@
                         </button>
                     </div>
                     <widget name="web_ribbon" title="В архіві" bg_color="text-bg-danger" invisible="active"/>
+                    <!-- скрыто: поле нужно для invisible="active" у ленты «В архіві» -->
                     <field name="active" invisible="1"/>
                     <div class="oe_title">
                         <h1><field name="name" readonly="1" placeholder="№ · номер картки"/></h1>
@@ -87,7 +90,9 @@
         <field name="model">workset.dkv.txn</field>
         <field name="arch" type="xml">
             <list string="Транзакції DKV" default_order="date desc, id desc" limit="200">
+                <!-- скрыто: валюта для денежных столбцов (currency_field) -->
                 <field name="currency_id" column_invisible="1"/>
+                <field name="id" string="№" widget="workset_profit_row_number" readonly="1" width="50px"/>
                 <field name="date" options="{'numeric': True}"/>
                 <field name="card_id"/>
                 <field name="country" optional="show"/>
@@ -109,6 +114,7 @@
         <field name="arch" type="xml">
             <form string="Транзакція DKV">
                 <sheet>
+                    <!-- скрыто: валюта для денежных полей формы (currency_field) -->
                     <field name="currency_id" invisible="1"/>
                     <div class="oe_title">
                         <h1><field name="name" readonly="1" placeholder="Дата · картка · місто · брутто"/></h1>

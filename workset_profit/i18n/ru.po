@@ -306,6 +306,7 @@ msgstr "Активно"
 
 #. module: workset_profit
 #: model:ir.model,name:workset_profit.model_workset_profit_check
+#: model_terms:ir.ui.view,arch_db:workset_profit.view_check_list
 msgid "Звірка місяця"
 msgstr "Сверка месяца"
 
@@ -706,6 +707,7 @@ msgstr "Служебное для карточки линии за период:
 
 #. module: workset_profit
 #: model:ir.model,name:workset_profit.model_workset_profit_overhead
+#: model_terms:ir.ui.view,arch_db:workset_profit.view_overhead_list
 msgid "ZUS і загальні місяця"
 msgstr "ZUS и общие месяца"
 
@@ -866,6 +868,7 @@ msgstr "Сверить"
 #. module: workset_profit
 #. odoo-javascript
 #: model_terms:ir.ui.view,arch_db:workset_profit.view_month_list
+#: model_terms:ir.ui.view,arch_db:workset_profit.view_overhead_list
 #: model_terms:ir.ui.view,arch_db:workset_profit.view_dkv_txn_list
 #: code:addons/workset_profit/static/src/xml/profit_screens.xml:0
 msgid "Разом"
