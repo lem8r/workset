@@ -8,7 +8,9 @@
         <field name="model">workset.profit.analytic.map</field>
         <field name="arch" type="xml">
             <list string="Розмітка аналітики" editable="bottom" decoration-muted="not active or kind == 'ignore'" default_order="kind, line_id">
+                <!-- скрыто: поле нужно для decoration-muted="not active …" -->
                 <field name="active" column_invisible="1"/>
+                <field name="id" string="№" widget="workset_profit_row_number" readonly="1" width="50px"/>
                 <field name="plan_id" options="{'no_create': True}"/>
                 <field name="analytic_id" options="{'no_create': True}"/>
                 <field name="account_id" options="{'no_create': True}" optional="show"/>

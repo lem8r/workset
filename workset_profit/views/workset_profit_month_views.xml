@@ -16,8 +16,12 @@
                             groups="workset_profit.group_editor,base.group_system"/>
                     <button name="action_verify" type="object" string="Звірити" class="btn-secondary" display="always"/>
                 </header>
+                <!-- скрыто: валюта для денежных столбцов (currency_field) -->
                 <field name="currency_id" column_invisible="1"/>
+                <!-- скрыто: вид строки нужен для decoration-muted и invisible кнопки строки -->
                 <field name="row_kind" column_invisible="1"/>
+                <!-- круг 5в: «№» — номер строки на экране (static/src/js/row_number.js), с учётом страницы пейджера; в группе — с 1 -->
+                <field name="id" string="№" widget="workset_profit_row_number" readonly="1" width="50px"/>
                 <field name="month" widget="date" options="{'numeric': True}"/>
                 <field name="name"/>
                 <field name="hours_total" optional="hide" sum="Разом"/>
@@ -65,6 +69,7 @@
                     <button name="action_open_card" type="object" string="Картка лінії" class="btn-primary" invisible="row_kind != 'line' or month &lt; '2026-01-01'"/>
                 </header>
                 <sheet>
+                    <!-- скрыто: валюта для денежных полей формы (currency_field) -->
                     <field name="currency_id" invisible="1"/>
                     <div class="oe_title">
                         <h1><field name="name" readonly="1"/></h1>
@@ -182,6 +187,39 @@
                     <filter name="groupby_kind" string="Вид рядка" context="{'group_by': 'row_kind'}"/>
                 </group>
             </search>
+        </field>
+    </record>
+
+    <!-- круг 5в: списки «Звірка місяця» (чип «Звірка» на екранах) і «ZUS і загальні місяця» — свій вид, щоб був стовпець «№»; пише лише код -->
+    <record id="view_check_list" model="ir.ui.view">
+        <field name="name">workset.profit.check.list</field>
+        <field name="model">workset.profit.check</field>
+        <field name="arch" type="xml">
+            <list string="Звірка місяця" create="0" edit="0" delete="0" decoration-danger="not ok">
+                <field name="id" string="№" widget="workset_profit_row_number" readonly="1" width="50px"/>
+                <field name="month" widget="date" options="{'numeric': True}"/>
+                <field name="ok"/>
+                <field name="text"/>
+                <field name="checked_at" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_overhead_list" model="ir.ui.view">
+        <field name="name">workset.profit.overhead.list</field>
+        <field name="model">workset.profit.overhead</field>
+        <field name="arch" type="xml">
+            <list string="ZUS і загальні місяця" create="0" edit="0" delete="0">
+                <!-- скрыто: валюта для денежных столбцов (currency_field) -->
+                <field name="currency_id" column_invisible="1"/>
+                <field name="id" string="№" widget="workset_profit_row_number" readonly="1" width="50px"/>
+                <field name="month" widget="date" options="{'numeric': True}"/>
+                <field name="zus" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
+                <field name="office" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
+                <field name="total" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
+                <field name="hours"/>
+                <field name="per_hour"/>
+            </list>
         </field>
     </record>
 

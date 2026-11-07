@@ -1199,6 +1199,18 @@ class TestWorksetProfit(TransactionCase):
         groups = menu['group_ids' if 'group_ids' in menu._fields else 'groups_id']  # Odoo 19 — group_ids
         self.assertEqual(groups, self.env.ref('workset_profit.group_viewer'), 'меню — лише групі перегляду')
 
+    def test_every_list_view_has_row_number(self):
+        """Круг 5в: у кожного list-виду моделей модуля — перша видима колонка «№» (поле id з віджетом workset_profit_row_number), включно зі
+        «Звіркою місяця» і «ZUS і загальні місяця», яким раніше Odoo будував автосписок."""
+        models = ['workset.profit.month', 'workset.profit.check', 'workset.profit.overhead', 'workset.line.cost.rule', 'workset.dkv.card',
+                  'workset.dkv.txn', 'workset.profit.analytic.map']
+        for model in models:
+            views = self.env[model].get_views([(False, 'list')])['views']
+            arch = views['list']['arch']
+            self.assertIn('widget="workset_profit_row_number"', arch, '%s: у списку немає «№»' % model)
+            first = re.search(r'<field name="(\w+)"(?![^>]*column_invisible)', arch)
+            self.assertEqual(first.group(1), 'id', '%s: «№» — перша видима колонка' % model)
+
 
 class _Both:
     """Два patch.object одним with (у setUpClass і тестах)."""

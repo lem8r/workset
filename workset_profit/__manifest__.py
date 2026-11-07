@@ -18,7 +18,8 @@
     'category': 'Accounting',
     # 19.0.4 (круг 5) — поле workset.profit.overhead.breakdown (склад для вікна «Що входить»): -u і перерахунок місяців;
     # 19.0.5 (круг 5б) — поле workset.profit.month.card_groups (склад «Рядків» картки лінії за період): -u і --recalc
-    'version': '19.0.5.0.0',
+    # 19.0.6 (круг 5в) — колонка «№» в таблицах: только вид (виджет списков row_number, шаблоны экранов), модели и поля те же — после -u пересчёт не нужен
+    'version': '19.0.6.1.0',
     # workset_rates — лінії, ставки (_plan_at), житло ліній (_housing_at), периметр фірм; через нього — account (аналітика, рахунки),
     # hr_timesheet (табелі), project, web (Chart.js для екранів). fleet — машина картки DKV (додаток «Автопарк» на проді встановлений)
     'depends': ['workset_rates', 'fleet'],
@@ -39,6 +40,9 @@
             'workset_profit/static/src/scss/workset_profit.scss',
             'workset_profit/static/src/js/profit_screens.js',
             'workset_profit/static/src/xml/profit_screens.xml',
+            # круг 5в: колонка «№» списков Odoo (переносимо: этот JS + шаблон)
+            'workset_profit/static/src/js/row_number.js',
+            'workset_profit/static/src/xml/row_number.xml',
         ],
     },
     'installable': True,
