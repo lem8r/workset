@@ -74,13 +74,36 @@
         white-space: pre-line;
         overflow-wrap: anywhere;
     }
-    // «Хто платить»: вузько — «Що» і «Хто платить» першим рядком, «з якого числа» і «звідки» — другим; широко — чотири колонки
+    // номер рядка «№» — вузька сіра колонка по правому краю (слово власника 07.11: «вопрос по номеру 3»)
+    .o_workset_client_no {
+        color: $gray-500;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        min-width: 1.5rem;
+        margin-right: map-get($spacers, 2);
+    }
+    // нумерація рядків списків картки — лічильник CSS (рядки з умовами й перемикачами нумеруються тими, що на екрані); заголовок «№» не лічиться
+    .o_workset_client_rows {
+        counter-reset: workset-client-row;
+    }
+    .o_workset_client_row::before {
+        counter-increment: workset-client-row;
+        content: counter(workset-client-row);
+        display: inline-block;
+        flex: none; // у рядку-флексі (d-flex justify-content-between) «№» — лише свій куток, а не третій елемент розподілу
+        min-width: 1.5rem;
+        margin-right: map-get($spacers, 2);
+        color: $gray-500;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    // «Хто платить»: вузько — «Що» і «Хто платить» першим рядком, «з якого числа» і «звідки» — другим; широко — п'ять колонок
     .o_workset_client_pay {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 1rem;
+        grid-template-columns: 1.5rem minmax(0, 1fr) minmax(0, 2fr) 1rem;
         grid-template-areas:
-            "what who go"
-            "since src go";
+            "no what who go"
+            "no since src go";
         column-gap: map-get($spacers, 3);
         row-gap: map-get($spacers, 1);
         align-items: baseline;
@@ -91,26 +114,32 @@
         display: none;
         border-top: 0;
     }
-    .o_workset_client_pay_what,
+    .o_workset_client_pay_no,
     .o_workset_client_pay_head > :nth-child(1) {
+        grid-area: no;
+        color: $gray-500;
+        text-align: right;
+    }
+    .o_workset_client_pay_what,
+    .o_workset_client_pay_head > :nth-child(2) {
         grid-area: what;
     }
     .o_workset_client_pay_who,
-    .o_workset_client_pay_head > :nth-child(2) {
+    .o_workset_client_pay_head > :nth-child(3) {
         grid-area: who;
         min-width: 0;
     }
     .o_workset_client_pay_since,
-    .o_workset_client_pay_head > :nth-child(3) {
+    .o_workset_client_pay_head > :nth-child(4) {
         grid-area: since;
     }
     .o_workset_client_pay_src,
-    .o_workset_client_pay_head > :nth-child(4) {
+    .o_workset_client_pay_head > :nth-child(5) {
         grid-area: src;
         min-width: 0;
     }
     .o_workset_client_pay_go,
-    .o_workset_client_pay_head > :nth-child(5) {
+    .o_workset_client_pay_head > :nth-child(6) {
         grid-area: go;
         align-self: center;
     }
@@ -119,8 +148,8 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
         .o_workset_client_pay {
-            grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 7rem minmax(0, 1.5fr) 1rem;
-            grid-template-areas: "what who since src go";
+            grid-template-columns: 1.5rem minmax(0, 1fr) minmax(0, 2fr) 7rem minmax(0, 1.5fr) 1rem;
+            grid-template-areas: "no what who since src go";
         }
         .o_workset_client_pay_head {
             display: grid;

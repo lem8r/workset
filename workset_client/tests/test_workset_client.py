@@ -68,7 +68,7 @@ class TestWorksetClient(TransactionCase):
                                   'date_from': OLD})
         # рядки «лінія × місяць» пише перерахунок «Прибутковості»; тут — готові, щоб перевірити лише підсумок періоду картки
         Month = env['workset.profit.month'].sudo()
-        for month, hours, share, housing, net in ((FEB, 10, 60, -10, 50), (MAR, 5, 40, 0, 40)):
+        for month, hours, share, housing, net in ((JAN, 5, 20, 0, 20), (FEB, 10, 60, -10, 50), (MAR, 5, 40, 0, 40)):
             Month.create({'month': month, 'row_kind': 'line', 'line_id': cls.line.id, 'name': 'Line K1', 'hours_total': hours,
                           'hours_rate': hours, 'share': share, 'housing': housing, 'net': net})
 
@@ -81,11 +81,13 @@ class TestWorksetClient(TransactionCase):
         return stack
 
     def _user(self, login, groups):
-        return new_test_user(self.env, login=login, groups=groups)
+        # користувачу — обидві фірми тесту (записи класу створено у фірмі cls.co; без неї «Access to unauthorized or invalid companies»)
+        return new_test_user(self.env, login=login, groups=groups, company_ids=[(6, 0, [self.env.ref('base.main_company').id, self.co.id])])
 
     def _as(self, rec, user):
-        # фірми контексту класу — не для користувача: лише його фірми (як у тестах «Прибутковості»)
-        return rec.with_user(user).with_context(allowed_company_ids=user.company_ids.ids)
+        # фірми контексту класу — не для користувача: лише його фірми, власна — перша (як у тестах «Прибутковості»)
+        ids = [user.company_id.id] + [i for i in user.company_ids.ids if i != user.company_id.id]
+        return rec.with_user(user).with_context(allowed_company_ids=ids)
 
     # ——— екран: рядки й описи кліку ———
     def test_screen_rows_and_opens(self):
@@ -156,7 +158,8 @@ class TestWorksetClient(TransactionCase):
         self.assertTrue(items['scan']['empty'])
         self.assertIn('K1-2030', items['contract']['value'])
         self.assertIn('15.01.2030', items['contract']['value'])
-        self.assertEqual(items['payment_term']['value'], term.display_name, 'строк оплати — стандартне поле контакту')
+        self.assertEqual(items['payment_term']['value'], '%s: %s' % (editor.company_id.name, term.display_name),
+                         'строк оплати — стандартне поле контакту; лише фірма, де він заданий (без «—» для решти)')
         self.assertEqual((items['sign']['value'], items['site_contact']['value']), ('Contact K1a', 'Contact K1b'))
         self.assertEqual(data['money']['withdraw'], 2.5)
         self.assertTrue(data['partner']['checked']['ok'])
@@ -183,12 +186,13 @@ class TestWorksetClient(TransactionCase):
         rows = {r['key']: r for r in d['profit']['rows']}
         self.assertEqual((rows['share']['ph'], rows['housing']['ph'], rows['net']['ph']), (6.0, -1.0, 5.0))
         q = self.Partner.workset_client_card(self.cust.id, 'quarter', FEB)
-        self.assertEqual(q['period']['months'], [JAN, FEB, MAR])
+        self.assertEqual(q['period']['months'], [JAN, FEB], 'К1б п. 4: квартал — до останнього закритого місяця, неповного березня немає')
         rows = {r['key']: r for r in q['profit']['rows']}
-        self.assertEqual(rows['share']['amount'], 100)
-        self.assertEqual(rows['share']['ph'], round(100 / 15.0, 2), 'на години зі ставкою всього періоду, не середнє місяців')
-        self.assertEqual(rows['net']['ph'], 6.0)
-        self.assertEqual(q['profit']['open']['domain'], [('month', 'in', [JAN, FEB, MAR]), ('row_kind', '=', 'line'), ('line_id', '=', self.line.id)])
+        self.assertEqual(rows['share']['amount'], 80)
+        self.assertEqual(rows['share']['ph'], round(80 / 15.0, 2), 'на години зі ставкою всього періоду, не середнє місяців')
+        self.assertEqual(rows['net']['ph'], round(70 / 15.0, 2))
+        self.assertEqual(q['profit']['open']['domain'], [('month', 'in', [JAN, FEB]), ('row_kind', '=', 'line'), ('line_id', '=', self.line.id)])
+        self.assertFalse(q['period']['next'], 'наступний квартал — поза останнім закритим місяцем')
         if 'remain' in self.env['workset.profit.month']._fields:
             self.assertTrue(q['profit']['oh_missing'], 'місяці без «ZUS і загальні» — «не перераховано», а не 0')
             self.assertNotIn('remain', rows)
@@ -227,6 +231,11 @@ class TestWorksetClient(TransactionCase):
 
     # ——— «Останні зміни» ———
     def test_changes_tracking_and_rule_creation(self):
+        # причина падіння dev-збірки 07.11: замовник створений у setUpClass, а mail.thread.create ставить йому _track_discard (початкові
+        # значення None) до першого precommit — доки той не відпрацював, write тієї ж транзакції не трекається (так у Odoo, не помилка
+        # модуля). Скидаємо чергу precommit, як це зробив би коміт між створенням і правкою
+        self.env.flush_all()
+        self.env.cr.precommit.run()
         self.cust.write({'workset_client_contract_no': 'K1-A'})
         self.env.flush_all()
         self.env.cr.precommit.run()
@@ -243,3 +252,199 @@ class TestWorksetClient(TransactionCase):
         self.assertTrue(any(c['open'] and c['open']['model'] == 'workset.line.housing' and c['open'].get('res_id') == self.housing.id for c in full),
                         'створення правила житла лінії')
         self.assertTrue(any(c['open'] and c['open']['model'] == 'workset.dkv.card.period' for c in full), 'період картки DKV лінії')
+
+    # ═══ К1б ═══
+    def _settle(self):
+        # записи setUpClass ще «в створенні» (mail.thread: _track_discard до першого precommit) — без цього їхні правки не трекаються
+        self.env.flush_all()
+        self.env.cr.precommit.run()
+
+    def _wizard(self, user, **vals):
+        return self._as(self.env['workset.client.terms'], user).with_context(default_partner_id=self.cust.id).create(vals)
+
+    # Б1: перепривʼязка чужих вкладень
+    def test_scan_save_moves_own_attachment_and_tracks(self):
+        self._settle()
+        editor = self._user('ws_client_scan_editor', 'base.group_user,workset_client.group_editor')
+        Att = self.env['ir.attachment']
+        mine = Att.with_user(editor).create({'name': 'k1b-scan-own.txt', 'raw': b'x', 'res_model': 'workset.client.terms', 'res_id': 0})
+        self._wizard(editor, scan_ids=[(6, 0, [mine.id])]).action_save()
+        self.assertEqual(self.cust.sudo().workset_client_contract_scan_ids, mine)
+        self.assertEqual((mine.sudo().res_model, mine.sudo().res_id), ('res.partner', self.cust.id), 'свій новий скан переїхав до замовника')
+        self._settle()
+        tv = self.env['mail.tracking.value'].sudo().search([
+            ('mail_message_id.model', '=', 'res.partner'), ('mail_message_id.res_id', '=', self.cust.id),
+            ('field_id.name', '=', 'workset_client_contract_scan_ids')])
+        self.assertTrue(tv, 'трекінг Many2many «Скан договору»')
+        self.assertIn('k1b-scan-own.txt', tv[0].new_value_char)
+
+    def test_scan_save_ignores_foreign_attachments(self):
+        # Б1. Чужий файл не стає сканом замовника ні за яких прав: ORM сам не дає звичайному редактору записати чужий файл у scan_ids
+        # (AccessError — прийнятний результат); редактор із правом правити контакти доходить до «Зберегти» — там відсікає _own_scans
+        Att = self.env['ir.attachment'].sudo()
+        foreign = Att.create({'name': 'k1b-foreign.txt', 'raw': b'y', 'res_model': 'res.partner', 'res_id': self.other.id})
+        stranger = Att.create({'name': 'k1b-stranger.txt', 'raw': b'z', 'res_model': 'workset.client.terms', 'res_id': 0})  # створив не editor
+        # Спроба в try: AccessError від ORM — прийнятно; ORM пропустив — тоді обовʼязково відсікає _own_scans. Утвердження нижче — в обох випадках
+        for login, groups in (('ws_client_scan_editor2', 'base.group_user,workset_client.group_editor'),
+                              ('ws_client_scan_editor3', 'base.group_user,workset_client.group_editor,base.group_partner_manager')):
+            editor = self._user(login, groups)
+            try:
+                wizard = self._wizard(editor, scan_ids=[(6, 0, [foreign.id, stranger.id])])
+                wizard.action_save()
+            except AccessError:
+                pass  # ORM зупинив раніше за наш код — теж закрито
+            self.assertFalse(self.cust.sudo().workset_client_contract_scan_ids, '%s: чужі вкладення не стали сканами замовника' % login)
+            self.assertEqual((foreign.res_model, foreign.res_id), ('res.partner', self.other.id), '%s: чужий файл не перепривʼязано' % login)
+            self.assertEqual((stranger.res_model, stranger.res_id), ('workset.client.terms', 0), login)
+
+    # Б2: default_get лише редактору
+    def test_default_get_only_editor(self):
+        clerk = self._user('ws_client_dg_clerk', 'base.group_user')
+        editor = self._user('ws_client_dg_editor', 'base.group_user,workset_client.group_editor')
+        self.cust.sudo().write({'workset_client_contract_no': 'K1-DG'})
+        Wiz = self.env['workset.client.terms']
+        with self.assertRaises(AccessError):
+            self._as(Wiz, clerk).with_context(default_partner_id=self.cust.id).default_get(['contract_no'])
+        got = self._as(Wiz, editor).with_context(default_partner_id=self.cust.id).default_get(['contract_no'])
+        self.assertEqual(got['contract_no'], 'K1-DG')
+
+    # п. 3: строк оплати по фірмах
+    def test_payment_term_per_company(self):
+        term = self.env['account.payment.term'].create({'name': 'Test term K1b'})
+        self.cust.sudo().with_company(self.co).property_payment_term_id = term
+        t = self.Partner._workset_client_terms(self.cust)
+        self.assertTrue(t['any'])
+        self.assertIn('%s: %s' % (self.co.name, term.display_name), t['text'])
+        self.assertEqual(t['text'], '%s: %s' % (self.co.name, term.display_name), 'лише фірми, де строк заданий, без порожніх «—»')
+        self.assertIn(self.cust.id, self.Partner.search([('workset_client_has_term', '=', True)]).ids, '«є хоча б в одній фірмі»')
+        self.assertNotIn(self.cust.id, self.Partner.search([('workset_client_has_term', '=', False)]).ids)
+        self.assertIn(self.other.id, self.Partner.search([('workset_client_has_term', '=', False)]).ids)
+        self.assertTrue(self.cust.workset_client_has_term)
+        items = {i['key']: i for i in self.Partner.workset_client_card(self.cust.id)['contract']['items']}
+        self.assertFalse(items['payment_term']['empty'])
+        self.assertIn(term.display_name, items['payment_term']['value'])
+        # майстер працює у фірмі контексту: запускаємо його саме у перевірюваній фірмі
+        wizard = self.env['workset.client.terms'].with_company(self.co).with_context(default_partner_id=self.cust.id).create({})
+        self.assertIn(self.co.name, wizard.company_note, 'у «Заповнити» — «для фірми X»')
+
+    # п. 4, п. 10: періоди «Рік» і «Квартал» — до останнього закритого місяця
+    def test_period_year_and_quarter_stop_at_last_closed(self):
+        y = self.Partner.workset_client_card(self.cust.id, 'year', FEB)
+        self.assertEqual((y['period']['kind'], y['period']['months']), ('year', [JAN, FEB]))
+        self.assertEqual(y['period']['value'], JAN)
+        rows = {r['key']: r for r in y['profit']['rows']}
+        self.assertEqual(rows['share']['amount'], 80, 'березень (поточний, неповний) у «Рік» не входить')
+        q = self.Partner.workset_client_card(self.cust.id, 'quarter', MAR)
+        self.assertEqual(q['period']['months'], [JAN, FEB], 'якір у поточному місяці — як останній закритий')
+        m = self.Partner.workset_client_card(self.cust.id, 'month', MAR)
+        self.assertEqual(m['period']['months'], [MAR], '«Місяць» явно — поточний місяць можна')
+
+    # п. 5: посередник у ставках — поле є, нульове — порожньо
+    def test_agent_in_rates_key(self):
+        a = self.Partner.workset_client_card(self.cust.id)['agent']
+        self.assertIn('in_rates', a)
+        self.assertFalse(a['in_rates'], 'частка посередника в ставках нуль — рядка немає')
+        # ненульовий: поле «Посередник» ставки пише «Ставки» (readonly, ланцюжок) — для проби ставимо SQL-ом, без перерахунку ланцюжка
+        self.env.cr.execute('UPDATE workset_rate SET agent_client_share = 1.5 WHERE id = %s', [self.r1.id])
+        self.r1.invalidate_recordset(['agent_client_share'])
+        a = self.Partner.workset_client_card(self.cust.id)['agent']
+        self.assertEqual(a['in_rates'], {'min': 1.5, 'max': 1.5, 'n': 1}, 'посередник у ставках: лише додатні, одна ставка з двох')
+        self.assertEqual(a['in_rates_open']['model'], 'workset.rate')
+        self.assertIn(('agent_client_share', '>', 0), a['in_rates_open']['domain'])
+
+    # п. 6, 7: кілька ліній і «мінімум» за замовчуванням
+    def test_multiple_lines_pick_and_min_default(self):
+        Line = self.env['workset.line']
+        c3 = self.Partner.create({'name': 'Customer K1c', 'is_company': True})
+        l2 = Line.create({'name': 'Line K1c-2', 'customer_ids': [(6, 0, [c3.id])]})
+        l3 = Line.create({'name': 'Line K1c-3', 'customer_ids': [(6, 0, [c3.id])]})
+        d = self.Partner.workset_client_card(c3.id)
+        p = d['partner']
+        self.assertEqual((p['more'], len(p['pick'])), (1, 2), '«ще 1 ліній ›» і вибір з двох')
+        self.assertEqual(len(p['lines']), 1, 'у шапці — обрана лінія')
+        self.assertEqual(p['line_id'], d['profit']['line']['id'])
+        other = l3 if p['line_id'] == l2.id else l2
+        d2 = self.Partner.workset_client_card(c3.id, None, None, other.id)
+        self.assertEqual((d2['partner']['line_id'], d2['profit']['line']['id']), (other.id, other.id))
+        d3 = self.Partner.workset_client_card(c3.id, None, None, self.line.id)
+        self.assertEqual(d3['partner']['line_id'], p['line_id'], 'чужа лінія ігнорується')
+        # «Мінімум частки»: правила пари немає — параметр «Ставок» (сірим), немає й його — «не задано»
+        Param = self.env['ir.config_parameter'].sudo()
+        Param.set_param('workset_rates.min_share_default', '2.5')
+        m = self.Partner.workset_client_card(c3.id)['money']
+        self.assertEqual((m['min_share'], m['min_default']), (None, 2.5))
+        Param.set_param('workset_rates.min_share_default', False)
+        m = self.Partner.workset_client_card(c3.id)['money']
+        self.assertEqual((m['min_share'], m['min_default']), (None, None))
+        m = self.Partner.workset_client_card(self.cust.id)['money']
+        self.assertEqual((m['min_share'], m['min_default']), (3, None), 'у правилі мінімум є — параметр не потрібен')
+
+    # п. 6, п. 10: замовник, відомий лише зі ставок, — колонки «Лінія» і «Житло»
+    def test_list_customer_known_only_by_rates(self):
+        c4 = self.Partner.create({'name': 'Customer K1d', 'is_company': True})
+        e3 = self.env['hr.employee'].with_company(self.co).create({'name': 'Worker K1d', 'company_id': self.co.id})
+        with self._deals():
+            rate = self.env['workset.rate'].create({'person_id': e3.work_contact_id.id, 'customer_id': c4.id, 'line_id': self.line.id,
+                                                    'wage': 15, 'source': 'other', 'date_from': OLD})
+        if rate.line_id != self.line:
+            self.skipTest('лінія ставки виводиться самою «Ставкою» — перевірити на копії')
+        self.assertIn(c4.id, self.Partner.search([('workset_client_is_customer', '=', True)]).ids)
+        self.assertEqual(c4.workset_client_line_text, 'Line K1', 'колонка «Лінія» — лінія його ставок')
+        labels = dict(self.env['workset.line.housing']._fields['payer']._description_selection(self.env))
+        self.assertEqual(c4.workset_client_housing_text, labels['we_buffer'], 'колонка «Житло» — за лінією ставок')
+        self.assertEqual(self.Partner.workset_client_card(c4.id)['partner']['line_id'], self.line.id)
+
+    # п. 8: обʼєднання контактів не-редактором
+    def test_merge_context_key_is_not_a_bypass(self):
+        # контекст у call_kw задає сам клієнт RPC — жодний ключ контексту не обходить групу (дірку знайшла приймання К1б)
+        clerk = self._user('ws_client_merge_clerk', 'base.group_user,base.group_partner_manager')
+        with self.assertRaises(AccessError):
+            self._as(self.cust, clerk).write({'workset_client_terms_note': 'K1-merge'})
+        for key in ('workset_client_merge', 'merge', 'tracking_disable'):
+            with self.assertRaises(AccessError):
+                self._as(self.cust, clerk).with_context(**{key: True}).write({'workset_client_terms_note': 'K1-merge'})
+        with self.assertRaises(AccessError):
+            self._as(self.Partner, clerk).with_context(workset_client_merge=True).create({'name': 'Merge ctx K1b', 'workset_client_terms_note': 'x'})
+        self.assertFalse(self.cust.sudo().workset_client_terms_note)
+
+    def test_real_partner_merge_wizard_by_non_editor(self):
+        Wiz = self.env.get('base.partner.merge.automatic.wizard')
+        if Wiz is None:
+            self.skipTest("майстра обʼєднання контактів у базі немає")
+        clerk = self._user('ws_client_merge_clerk2', 'base.group_user,base.group_partner_manager')
+        src = self.Partner.create({'name': 'Merge src K1b', 'is_company': True})
+        dst = self.Partner.create({'name': 'Merge dst K1b', 'is_company': True})
+        src.sudo().write({'workset_client_terms_note': 'K1-from-src'})
+        self._as(Wiz, clerk)._merge([src.id, dst.id], dst.with_user(clerk), extra_checks=False)  # без AccessError на workset_client_*
+        self.assertFalse(src.exists(), 'слияние выполнено: источник удалён')
+        # _update_values (Odoo 19) переносит только поля с copy=True, а наши — copy=False: поддельное «Перевірено» слиянием в настоящего
+        # заказчика не попадёт (К1в п. 8: «значение перешло» невозможно по устройству — проверяем, что и не перешло)
+        self.assertFalse(dst.sudo().workset_client_terms_note)
+
+    # К1в п. 1: свої поля не підставляються default_<поле> з контексту / ir.default (create, name_create, copy)
+    def test_forged_defaults_rejected_for_non_editor(self):
+        clerk = self._user('ws_client_forge_clerk', 'base.group_user,base.group_partner_manager')
+        Clerk = self._as(self.Partner, clerk)
+        forged = (('default_workset_client_checked_date', '2030-01-01'), ('default_workset_client_checked_by_id', clerk.id),
+                  ('default_workset_client_contract_no', 'K1-FORGED'))
+        # контроль: без default_* ті самі дії не-редактору дозволені — отже AccessError нижче саме від перевірки модуля
+        Clerk.create({'name': 'Forged K1v control'})
+        Clerk.name_create('Forged K1v control name')
+        self._as(self.cust, clerk).copy()
+        for key, value in forged:
+            ctx = {key: value}
+            with self.assertRaises(AccessError, msg='create ' + key):
+                Clerk.with_context(**ctx).create({'name': 'Forged K1v'})
+            with self.assertRaises(AccessError, msg='name_create ' + key):
+                Clerk.with_context(**ctx).name_create('Forged K1v name')
+            with self.assertRaises(AccessError, msg='copy ' + key):
+                self._as(self.cust, clerk).with_context(**ctx).copy()
+        self.env['ir.default'].sudo().set('res.partner', 'workset_client_contract_no', 'K1-IRD')
+        with self.assertRaises(AccessError, msg='ir.default'):
+            Clerk.create({'name': 'Forged K1v ir.default'})
+        self.assertFalse(self.Partner.sudo().search([('name', 'like', 'Forged K1v'), ('workset_client_contract_no', '!=', False)]),
+                         'поддельных контактов не осталось')
+        # редактору те самі default_* дозволені
+        editor = self._user('ws_client_forge_editor', 'base.group_user,workset_client.group_editor,base.group_partner_manager')
+        rec = self._as(self.Partner, editor).with_context(default_workset_client_checked_date='2030-01-01').create({'name': 'Forged K1v editor'})
+        self.assertEqual(str(rec.sudo().workset_client_checked_date), '2030-01-01')

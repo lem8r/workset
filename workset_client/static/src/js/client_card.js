@@ -75,7 +75,7 @@ export class ClientCard extends Component {
         this.orm = useService("orm");
         this.action = useService("action");
         this.notification = useService("notification");
-        this.state = useState({ data: null, failed: false });
+        this.state = useState({ data: null, failed: false, pick: false });
         this.serial = 0;
         this.money = money;
         this.plain = plain;
@@ -89,6 +89,7 @@ export class ClientCard extends Component {
         this.partnerId = params.partner_id || saved.partner_id;
         this.period = params.period || (same ? saved.period : "month");
         this.month = params.month || (same ? saved.month : false);
+        this.lineId = params.line_id || false; // лінія з кількох ліній замовника: не зберігається — після F5 перша
         onWillStart(() => this.load());
     }
 
@@ -139,7 +140,7 @@ export class ClientCard extends Component {
     }
 
     async load() {
-        const data = await this.fetch([this.partnerId || false, this.period, this.month || false]);
+        const data = await this.fetch([this.partnerId || false, this.period, this.month || false, this.lineId || false]);
         if (data) {
             this.keep(data);
             this.state.data = data;
@@ -151,8 +152,22 @@ export class ClientCard extends Component {
     /** Вибір екрана — з показаних даних (після помилки наступний запит іде від них). */
     keep(data) {
         this.partnerId = data.partner ? data.partner.id : false;
+        this.lineId = data.partner ? data.partner.line_id : false;
         this.period = data.period.kind;
         this.month = data.period.value;
+    }
+
+    /** Лінія з кількох ліній замовника — «ще N ліній ›» відкриває вибір; вибір перезавантажує екран на цю лінію. */
+    pickLine(id) {
+        this.state.pick = false;
+        if (id && id !== this.lineId) {
+            this.lineId = id;
+            this.load();
+        }
+    }
+
+    togglePick() {
+        this.state.pick = !this.state.pick;
     }
 
     /** Ім'я дії — назва замовника (хлібна крихта й вкладка після F5 чи прямого URL), як картка лінії «Прибутковості». */
@@ -165,6 +180,11 @@ export class ClientCard extends Component {
 
     setPeriod(kind) {
         if (kind !== this.period) {
+            // «Квартал / Рік → Місяць» відкриває останній закритий місяць цього періоду (months закінчуються ним), а не перший
+            const months = this.data && this.data.period ? this.data.period.months : [];
+            if (kind === "month" && months.length) {
+                this.month = months[months.length - 1];
+            }
             this.period = kind;
             this.load();
         }
@@ -272,5 +292,7 @@ export class ClientListController extends ListController {
         return this.cardAction.doAction({ type: "ir.actions.client", tag: CARD, name: record.data.name || "", params: { partner_id: record.resId } });
     }
 }
+
+// Колонка «№» списку — не наш віджет, а переносний workset_profit_row_number «Прибутковості» 19.0.6 (view: <field name="id" widget=...>).
 
 registry.category("views").add("workset_client_list", { ...listView, Controller: ClientListController });

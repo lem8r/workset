@@ -122,10 +122,11 @@ class ResPartner(models.Model):
 
     # ——— екран ———
     @api.model
-    def workset_client_card(self, partner_id=None, period=None, month=None):
+    def workset_client_card(self, partner_id=None, period=None, month=None, line_id=None):
         """Екран «Умови клієнта» — один виклик: замовник (комерційний контрагент partner_id; немає — 'partner': False і підказка «оберіть у
         списку»), період «Що з цього виходить» (period — 'month' / 'quarter' / 'year', month — місяць-якір; calc.period_info: за
-        замовчуванням — останній закритий місяць, лише з січня 2026). → {'partner' (шапка: назва, країна, ПДВ, лінії, проєкти, перевірено),
+        замовчуванням — останній закритий місяць, лише з січня 2026; квартал і рік — до останнього закритого), лінія (line_id — одна з
+        ліній замовника, коли їх кілька; немає чи чужа — перша). → {'partner' (шапка: назва, країна, ПДВ, лінія, «ще N ліній», проєкти, перевірено),
         'period', 'can_edit', 'money', 'pays', 'agent', 'contract', 'profit', 'changes'}; кожен елемент із кліком — з описом 'open'."""
         self._workset_client_check_view()
         lang = calc.lang_of(self.env.lang)
@@ -141,22 +142,25 @@ class ResPartner(models.Model):
         idx = self._workset_client_index({cust.id})
         rates = self.env[RATE].sudo().browse([r.id for r in idx['rates'].get(cust.id, [])])
         lines = self.env[LINE].sudo().browse([x.id for x in idx['lines'].get(cust.id, [])])
-        line = lines[:1] or self._workset_client_rates_line(rates)
+        lid = pcalc.parse_id(line_id)
+        line = lines.filtered(lambda x: x.id == lid)[:1] or lines[:1] or self._workset_client_rates_line(rates)
         rates_dom = self._workset_client_rates_dom(cust)
         rates_open = self._workset_client_open(calc.t('o_rates', lang) % name, rates_dom, RATE)
-        out['partner'] = self._workset_client_head(cust, lines or line, lang)
+        out['partner'] = self._workset_client_head(cust, lines or line, line, lang)
 
         # «Гроші за годину»: діючі ставки замовника на сьогодні; мінімум і оренда авто — загальна ставка пари «лінія × замовник»
         Rule = self.env[RULE].sudo()
         rule_recs = Rule.search([('line_id', '=', line.id)]) if line else Rule
         rules = [{'id': r.id, 'line_id': r.line_id.id, 'customer_id': pcalc.cust_of(r.customer_id), 'date_from': pcalc.iso(r.date_from)}
                  for r in rule_recs]
-        ms = calc.min_share(rules, {r.id: r.min_share for r in rule_recs}, line.id, cust.id, today)
+        default_min = rcalc.parse_float(self.env['ir.config_parameter'].sudo().get_param(rcalc.P_MIN_SHARE) or '')
+        ms = calc.min_share(rules, {r.id: r.min_share for r in rule_recs}, line.id, cust.id, today, default_min,
+                           line.min_share if line else 0.0)
         rr = Rule.browse(ms['rule_id']) if ms['rule_id'] else Rule
         rule_open = self._workset_client_rule_open({'model': 'rate_rule', 'id': rr.id}, line, cust, lang) if line else False
         withdraw = cust.workset_client_withdraw_pct
         out['money'] = {'price': calc.money_range(rates.mapped('price')), 'wage': calc.money_range(rates.mapped('wage')), 'count': len(rates),
-                        'share': calc.share_avg(rates.mapped('our_share')), 'min_share': ms['value'], 'withdraw': withdraw or None,
+                        'share': calc.share_avg(rates.mapped('our_share')), 'min_share': ms['value'], 'min_default': ms['default'], 'withdraw': withdraw or None,
                         'open': rates_open, 'rule_open': rule_open}
 
         # «Хто платить»
@@ -184,8 +188,13 @@ class ResPartner(models.Model):
         agent_open = items and self._workset_client_open(calc.t('o_deals', lang) % name, [('id', 'in', sorted({i['id'] for i in items}))], DEAL,
                                                          items[0]['id'] if len({i['id'] for i in items}) == 1 else None)
         line_agent = line.agent_id if line else self.env['res.partner']
+        # посередник «у ставках» (поле «Посередник» діючих ставок — його рахує «Ставки» з домовленостей): коли модуля агентів немає або
+        # домовленостей по замовнику немає, але ставки його частку несуть — діапазон «€ год» і клік на такі ставки
+        in_rates = calc.agent_rates_range(rates.mapped('agent_client_share')) if 'agent_client_share' in rates._fields else None
         out['agent'] = {
-            'installed': deals is not None, 'items': items, 'open': agent_open or False,
+            'installed': deals is not None, 'items': items, 'open': agent_open or False, 'in_rates': in_rates,
+            'in_rates_open': bool(in_rates) and self._workset_client_open(calc.t('o_agent_rates', lang) % name,
+                                                                          rates_dom + [('agent_client_share', '>', 0)], RATE),
             'line_agent': line_agent.display_name or '',
             'line_agent_open': bool(line_agent) and self._workset_client_open(calc.t('o_agent', lang) % line_agent.display_name,
                                                                               [('id', '=', line_agent.id)], 'res.partner', line_agent.id),
@@ -194,11 +203,11 @@ class ResPartner(models.Model):
         }
 
         # «Договір і оплата»: свої поля й стандартний строк оплати
-        term = cust.property_payment_term_id
+        term = self._workset_client_terms(cust)  # строк оплати залежить від фірми: по кожній фірмі периметра
         scans = cust.workset_client_contract_scan_ids
         terms = calc.contract_items({
             'contract_no': cust.workset_client_contract_no, 'contract_date': pcalc.iso(cust.workset_client_contract_date), 'scan': len(scans),
-            'payment_term': term.display_name if term else '', 'sign': cust.workset_client_sign_id.name or '',
+            'payment_term': term['text'], 'sign': cust.workset_client_sign_id.name or '',
             'site_contact': cust.workset_client_site_contact_id.name or '', 'site_address': cust.workset_client_site_address or '',
             'note': cust.workset_client_terms_note or ''}, lang)
         for it in terms:
@@ -210,8 +219,9 @@ class ResPartner(models.Model):
         out['changes'] = self._workset_client_changes(cust, line, lang)
         return out
 
-    def _workset_client_head(self, cust, lines, lang):
-        """Шапка: назва, країна, ПДВ, лінії (з «Замовників» ліній; немає — лінія ставок), проєкти замовника (усі фірми), «Перевірено»."""
+    def _workset_client_head(self, cust, lines, line, lang):
+        """Шапка: назва, країна, ПДВ, обрана лінія (line; з кількох ліній «Замовників» — 'more' = «ще N ліній ›» і 'pick' — вибір лінії;
+        немає — лінія ставок), проєкти замовника (усі фірми), «Перевірено»."""
         name = cust.display_name
         projects = self.env['project.project'].sudo().search([('partner_id.commercial_partner_id', '=', cust.id)], order='name, id')
         names = sorted({p.name for p in projects if p.name})
@@ -219,7 +229,9 @@ class ResPartner(models.Model):
                 'open': self._workset_client_open(calc.t('o_partner', lang) % name, [('id', '=', cust.id)], 'res.partner', cust.id),
                 'lines': [{'id': x.id, 'name': x.display_name,
                            'open': self._workset_client_open(calc.t('o_line', lang) % x.display_name, [('id', '=', x.id)], LINE, x.id)}
-                          for x in lines],
+                          for x in line],
+                'line_id': line.id or False, 'more': max(len(lines) - 1, 0), 'more_text': calc.more_lines_text(len(lines) - 1, lang) if len(lines) > 1 else '',
+                'pick': [{'id': x.id, 'name': x.display_name, 'on': x.id == line.id} for x in lines] if len(lines) > 1 else [],
                 'projects': names[:PROJECTS_MAX], 'projects_more': max(len(names) - PROJECTS_MAX, 0),
                 'projects_open': bool(projects) and self._workset_client_open(calc.t('o_projects', lang) % name,
                                                                               [('id', 'in', projects.ids)], 'project.project'),

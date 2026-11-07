@@ -53,6 +53,16 @@ msgid "Стандартне поле контакту «Умови оплати�
 msgstr "Стандартное поле контакта «Условия оплаты»: им пользуются счета"
 
 #. module: workset_client
+#: model:ir.model.fields,field_description:workset_client.field_workset_client_terms__company_note
+msgid "Фірма строку оплати"
+msgstr "Фирма срока оплаты"
+
+#. module: workset_client
+#: model:ir.model.fields,help:workset_client.field_workset_client_terms__company_note
+msgid "Строк оплати контакту залежить від фірми: вікно змінює строк поточної фірми"
+msgstr "Срок оплаты контакта зависит от фирмы: окно меняет срок текущей фирмы"
+
+#. module: workset_client
 #: model:ir.model.fields,field_description:workset_client.field_workset_client_terms__sign_id
 #: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_sign_id
 msgid "Хто погоджує табель"
@@ -161,6 +171,16 @@ msgstr "Договор есть"
 #: model_terms:ir.ui.view,arch_db:workset_client.view_partner_client_list
 msgid "Договір"
 msgstr "Договор"
+
+#. module: workset_client
+#: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_has_term
+msgid "Термін оплати є"
+msgstr "Срок оплаты есть"
+
+#. module: workset_client
+#: model:ir.model.fields,help:workset_client.field_res_partner__workset_client_has_term
+msgid "Строк оплати заданий хоча б в одній фірмі"
+msgstr "Срок оплаты задан хотя бы в одной фирме"
 
 #. module: workset_client
 #: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_checked_text
@@ -331,8 +351,20 @@ msgstr "Доля WorkSET"
 #. module: workset_client
 #. odoo-javascript
 #: code:addons/workset_client/static/src/xml/client_card.xml:0
+msgid "сер. за ставками"
+msgstr "сред. по ставкам"
+
+#. module: workset_client
+#. odoo-javascript
+#: code:addons/workset_client/static/src/xml/client_card.xml:0
 msgid "Мінімум частки"
 msgstr "Минимум доли"
+
+#. module: workset_client
+#. odoo-javascript
+#: code:addons/workset_client/static/src/xml/client_card.xml:0
+msgid "за замовчуванням"
+msgstr "по умолчанию"
 
 #. module: workset_client
 #. odoo-javascript
@@ -417,6 +449,12 @@ msgstr "€/мес"
 #: code:addons/workset_client/static/src/xml/client_card.xml:0
 msgid "немає"
 msgstr "нет"
+
+#. module: workset_client
+#. odoo-javascript
+#: code:addons/workset_client/static/src/xml/client_card.xml:0
+msgid "посередник у ставках —"
+msgstr "посредник в ставках —"
 
 #. module: workset_client
 #. odoo-javascript
