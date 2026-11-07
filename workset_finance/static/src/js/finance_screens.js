@@ -5,7 +5,8 @@
  *  (образець — екрани «Прибутковості», М3). Графік — Chart.js із бандла web (web.chartjs_lib); кольори графіка — явні (PALETTE: CSS-змінних
  *  Bootstrap Odoo 19 не задає), бренд — тон класу стовпця «чистий прибуток» (scss: $primary); світла чи темна тема — за яскравістю фону.
  *  Кожне число відкриває свої записи (опис 'open' — у тій самій відповіді); клік по місяцю графіка — вибір місяця; чип «Якість даних» —
- *  вікно «три кошики» з тієї самої відповіді. Місяць переживає перехід до списку й назад (стан дії: useSetupAction → props.state). */
+ *  вікно «три кошики» з тієї самої відповіді. Круг 3: період — «Місяць» / «Рік» / «Період» (від місяця до місяця, не раніше 2026-01, не
+ *  більше max_months місяців); період переживає перехід до списку й назад (стан дії: useSetupAction → props.state). */
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { loadBundle } from "@web/core/assets";
@@ -23,6 +24,37 @@ const MONTH = "workset.finance.month";
 /** Сума в € без копійок: 69349.6 → «69 350», −438 → «−438» (мінус — типографський). */
 export function euros(value) {
     return formatFloat(Math.round(value || 0), { digits: [16, 0] }).replace(/^-/, "−");
+}
+
+/** Місяць «РРРР-ММ» (чи «РРРР-ММ-ДД») + n місяців → «РРРР-ММ». */
+export function ymAdd(ym, n) {
+    const [y, m] = String(ym).slice(0, 7).split("-").map(Number);
+    const k = y * 12 + (m - 1) + n;
+    return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}`;
+}
+
+/** Період одного місяця для сервера: «РРРР-ММ-ДД» чи «РРРР-ММ» → { kind: "month", from, to }. */
+export function monthPeriod(value) {
+    const ym = String(value).slice(0, 7);
+    return { kind: "month", from: ym, to: ym };
+}
+
+/** Свій період після вибору однієї межі (круг 3): «від» пізніше за «до» — друга межа стає поруч; довший за max місяців — друга межа
+ *  підтягується (рахує сервер так само: інакше відмова). changed — "from" чи "to". → { kind: "range", from, to }. */
+export function clampRange(from, to, changed, max = 36) {
+    let a = String(from).slice(0, 7);
+    let b = String(to).slice(0, 7);
+    if (a > b) {
+        [a, b] = changed === "from" ? [a, a] : [b, b];
+    }
+    if (ymAdd(a, max - 1) < b) {
+        if (changed === "from") {
+            b = ymAdd(a, max - 1);
+        } else {
+            a = ymAdd(b, 1 - max);
+        }
+    }
+    return { kind: "range", from: a, to: b };
 }
 
 /** Відсоток з одним знаком без зайвого нуля: 16.6 → «16,6», 1 → «1». */
@@ -138,15 +170,16 @@ export class FinanceOwner extends Component {
         this.notification = useService("notification");
         this.dialog = useService("dialog");
         const params = (this.props.action && this.props.action.params) || {};
-        // місяць — з повернення назад (стан дії), з переходу (params.month), інакше — за замовчуванням сервера
-        this.month = (this.props.state && this.props.state.month) || params.month || false;
+        const back = this.props.state || {};
+        // період — з повернення назад (стан дії; старий стан — місяць), з переходу (params.month), інакше — за замовчуванням сервера
+        this.period = back.period || (back.month && monthPeriod(back.month)) || (params.month && monthPeriod(params.month)) || false;
         this.state = useState({ data: null, failed: false });
         this.serial = 0;
         this.charts = [];
         this.euros = euros;
         this.plain = plain;
         this.chartRef = useRef("chart");
-        useSetupAction({ getLocalState: () => ({ month: this.month }) });
+        useSetupAction({ getLocalState: () => ({ period: this.period }) });
         onWillStart(async () => {
             await loadBundle("web.chartjs_lib");
             await this.load();
@@ -164,19 +197,25 @@ export class FinanceOwner extends Component {
         return this.state.data;
     }
 
-    /** Виклик сервера; відповідь, що запізнилась (уже вибрали інший місяць), відкидається. Помилка при першому показі — як у Odoo (вікно
-     *  помилки); при зміні місяця — повідомлення, на екрані лишаються попередні дані з позначкою (state.failed). */
+    /** Період відповіді сервера (той, що на екрані) → { kind, from, to }. */
+    periodOf(data) {
+        const p = data.period;
+        return { kind: p.kind, from: p.from, to: p.to };
+    }
+
+    /** Виклик сервера; відповідь, що запізнилась (уже вибрали інший період), відкидається. Помилка при першому показі — як у Odoo (вікно
+     *  помилки); при зміні періоду — повідомлення, на екрані лишаються попередні дані з позначкою (state.failed). */
     async load() {
         const serial = ++this.serial;
         let data;
         try {
-            data = await this.orm.call(MONTH, "finance_owner", [this.month]);
+            data = await this.orm.call(MONTH, "finance_owner", [this.period]);
         } catch (error) {
             if (!this.state.data) {
                 throw error;
             }
             if (serial === this.serial) {
-                this.month = this.state.data.month.value;
+                this.period = this.periodOf(this.state.data);
                 this.state.failed = true;
                 this.notification.add(_t("Не вдалося оновити — на екрані попередні дані"), { type: "danger" });
             }
@@ -185,16 +224,60 @@ export class FinanceOwner extends Component {
         if (serial !== this.serial) {
             return;
         }
-        this.month = data.month.value;
+        this.period = this.periodOf(data);
         this.state.failed = false;
         this.state.data = data;
     }
 
-    setMonth(value) {
-        if (value && (!this.data || value !== this.data.month.value)) {
-            this.month = value;
+    /** Новий період — лише якщо він інший, ніж на екрані. */
+    setPeriod(p) {
+        const cur = this.data && this.periodOf(this.data);
+        if (p && (!cur || p.kind !== cur.kind || p.from !== cur.from || p.to !== cur.to)) {
+            this.period = p;
             this.load();
         }
+    }
+
+    /** Місяць (вибір, клік по графіку) — «РРРР-ММ-ДД». */
+    setMonth(value) {
+        if (value) {
+            this.setPeriod(monthPeriod(value));
+        }
+    }
+
+    setYear(year) {
+        if (year) {
+            this.setPeriod({ kind: "year", from: String(year), to: String(year) });
+        }
+    }
+
+    /** Свій період: межа «від» чи «до» (місяць «РРРР-ММ-ДД» вибору); друга межа — щоб «від» ≤ «до» і не більше max_months місяців. */
+    setRange(changed, value) {
+        const p = this.data.period;
+        const from = changed === "from" ? value : p.from;
+        const to = changed === "to" ? value : p.to;
+        this.setPeriod(clampRange(from, to, changed, this.data.max_months));
+    }
+
+    /** Перемикач «Місяць / Рік / Період»: місяць і рік — від останнього порахованого місяця періоду на екрані (anchor); свій період — рік
+     *  на екрані цілком (до anchor), а з місяця — січень … цей місяць. */
+    setKind(kind) {
+        const p = this.data.period;
+        if (kind === p.kind) {
+            return;
+        }
+        if (kind === "month") {
+            this.setPeriod(monthPeriod(p.anchor));
+        } else if (kind === "year") {
+            this.setYear(p.anchor.slice(0, 4));
+        } else {
+            this.setPeriod({ kind: "range", from: p.kind === "year" ? p.from : `${p.anchor.slice(0, 4)}-01`, to: p.anchor });
+        }
+    }
+
+    /** Кнопка перемикача: обраний вид — натиснута. */
+    kindCls(kind) {
+        return this.data.period.kind === kind ? "active" : "";
     }
 
     /** Список за описом сервера: модель, заголовок, домен, контекст (без «Створити»); є res_id — форма одного запису; опис {dialog} — вікно
@@ -258,6 +341,15 @@ export class FinanceOwner extends Component {
     keyOpen(ev, spec) {
         if (spec && (ev.key === "Enter" || ev.key === " ")) {
             ev.preventDefault();
+            ev.stopPropagation();
+            this.openList(spec);
+        }
+    }
+
+    /** Число всередині клікабельного блока (круг 3: «з початку року» в плитці, «частка» й «витрати компанії» в рядку «Власників»): є свій
+     *  опис — відкрити його й не пустити клік до блока; немає — клік іде до блока, як по тексту. */
+    openInner(ev, spec) {
+        if (spec) {
             ev.stopPropagation();
             this.openList(spec);
         }
