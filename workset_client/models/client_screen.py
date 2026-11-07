@@ -31,6 +31,7 @@ MONTH = 'workset.profit.month'
 DEAL = 'workset.agent.deal.client'  # модуль «Агенти» (workset_agents): немає моделі — блок пише «модуль агентів не встановлено»
 DEAL_NEED = ('state', 'kind', 'customer_ids', 'line_id', 'rate', 'agent_id', 'date_from', 'date_to')
 PROFIT_VIEWER = 'workset_profit.group_viewer'
+CHANGES_FETCH = 200  # «Останні зміни»: стільки трекінгів на джерело до згортання однотипних
 PROJECTS_MAX = 3  # проєкти в шапці — стільки назв, решта — «+N»
 ROW_FIELDS = ['month', 'hours_total', 'hours_rate', 'share', 'car_rent', 'housing', 'housing_customer', 'auto', 'fuel', 'tool', 'transport', 'net']
 OVERHEAD_FIELDS = ['zus_amount', 'office_amount', 'remain']  # «Прибутковість» 19.0.3 (круг 4); немає — рядків ZUS і «Залишається» немає
@@ -176,7 +177,7 @@ class ResPartner(models.Model):
         deals = self._workset_client_deals()
         src['fund_deals'] = deals or []
         src['fund_rates'] = rates.mapped('worker_fund_share') if 'worker_fund_share' in rates._fields else []
-        pays = calc.pays_rows(src, line.id or 0, cust.id, today, self._workset_client_labels(), lang)
+        pays = calc.pays_shown(calc.pays_rows(src, line.id or 0, cust.id, today, self._workset_client_labels(), lang, line.display_name or ''))
         for row in pays:
             row['open'] = self._workset_client_rule_open(row.pop('rule'), line, cust, lang)
             if row.get('card_ids'):
@@ -207,7 +208,7 @@ class ResPartner(models.Model):
         scans = cust.workset_client_contract_scan_ids
         terms = calc.contract_items({
             'contract_no': cust.workset_client_contract_no, 'contract_date': pcalc.iso(cust.workset_client_contract_date), 'scan': len(scans),
-            'payment_term': term['text'], 'sign': cust.workset_client_sign_id.name or '',
+            'payment_term': term['text'], 'withdraw': withdraw, 'sign': cust.workset_client_sign_id.name or '',
             'site_contact': cust.workset_client_site_contact_id.name or '', 'site_address': cust.workset_client_site_address or '',
             'note': cust.workset_client_terms_note or ''}, lang)
         for it in terms:
@@ -291,7 +292,8 @@ class ResPartner(models.Model):
                 dom = [('mail_message_id.model', '=', model), ('mail_message_id.res_id', 'in', recs.ids)]
                 if only:
                     dom.append(('field_id.name', 'in', only))
-                for tv in Track.search(dom, order='id desc', limit=calc.CHANGES_MAX):
+                # зміни одного виду (скажімо, 30 ставок) згортаються в один рядок — беремо більше за CHANGES_MAX рядків
+                for tv in Track.search(dom, order='id desc', limit=CHANGES_FETCH):
                     msg = tv.mail_message_id
                     event(msg.date or tv.create_date, key, tv.field_id.field_description or tv.field_id.name, self.env[model].sudo().browse(msg.res_id),
                           model, msg.author_id.name, self._workset_client_track(tv, 'old', lang), self._workset_client_track(tv, 'new', lang))
@@ -303,4 +305,4 @@ class ResPartner(models.Model):
             # період картки без історії змін (не mail.thread): правка пізніше за створення — окремим рядком «змінено»
             if p.write_date and p.create_date and (p.write_date - p.create_date).total_seconds() > 60:
                 event(p.write_date, 'm_dkv', calc.t('ch_changed', lang), p, PERIOD, p.write_uid.name)
-        return calc.changes_top(events)
+        return calc.changes_top(events, lang=lang)

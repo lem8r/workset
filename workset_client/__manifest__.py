@@ -15,7 +15,7 @@
     'website': 'https://workset.com.ua',
     'license': 'LGPL-3',
     'category': 'Sales',
-    'version': '19.0.1.2.0',
+    'version': '19.0.1.3.0',
     # workset_rates — ставки, загальні ставки, житло ліній, лінії (і через нього account: строк оплати контакту, project — проєкти
     # замовника); workset_profit ≥ 19.0.6 (віджет колонки «№» списків workset_profit_row_number — row_number.js «Прибутковості»; Odoo не
     # має версії в depends, тому порядок викладки: СПОЧАТКУ workset_profit 19.0.6, потім цей модуль) — «Хто платить», картки DKV, рядки «лінія × місяць», calc; mail — історія змін своїх полів.

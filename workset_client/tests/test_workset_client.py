@@ -9,6 +9,7 @@ workset_client). Усі дані — вигадані в самому тесті
 - загальна ставка лінії: мінімум частки 3, оренда авто 0,5; житло — правило лінії (платимо ми з буфера);
 - «Хто платить» паливо: правило лінії — ми, правило замовника — партнер (замовник точніший); перевезення — правила немає;
 - картка DKV на лінію; рядки «лінія × місяць» лютого (10 год) і березня (5 год) 2030 — для «Місяць | Квартал»."""
+import re
 from contextlib import ExitStack
 from unittest.mock import patch
 
@@ -106,8 +107,12 @@ class TestWorksetClient(TransactionCase):
         self.assertIn(('state', '=', 'current'), m['open']['domain'])
         self.assertIsNone(m['withdraw'], 'відсотка за виведення немає — «—», не 0')
 
-        self.assertEqual([r['key'] for r in data['pays']], PAY_KEYS)
+        self.assertEqual([r['key'] for r in data['pays']], [k for k in PAY_KEYS if k != 'fund'], 'К1г п. 5: «Фонд працівників — не діє» не показується')
         pays = {r['key']: r for r in data['pays']}
+        self.assertEqual(pays['housing']['source_text'], 'правило лінії Line K1', 'К1г п. 2: коротко «правило лінії <лінія>», дата — у колонці «З якого числа»')
+        self.assertEqual(pays['tool']['source_text'], '', 'правила немає — пусто')
+        self.assertEqual(pays['fuel']['source_text'], 'правило замовника')
+        self.assertEqual(pays['fuel']['source'], 'customer fuel', 'повний текст правила — для підказки')
         h = pays['housing']
         labels = dict(self.env['workset.line.housing']._fields['payer']._description_selection(self.env))
         self.assertEqual((h['payer'], h['level'], h['tone']), (labels['we_buffer'], 'line', ''))
@@ -122,7 +127,7 @@ class TestWorksetClient(TransactionCase):
         self.assertNotIn('res_id', tr['open'])
         self.assertEqual(tr['open']['domain'], [('line_id', '=', self.line.id), ('kind', '=', 'transport')])
         self.assertEqual((pays['car_rent']['amount'], pays['car_rent']['open']['res_id']), (0.5, self.rule.id))
-        self.assertEqual(pays['fund']['tone'], 'muted', 'фонду немає — «не діє»')
+        self.assertNotIn('fund', pays, 'фонду немає — рядка немає')
 
         a = data['agent']
         self.assertEqual((a['found']['us'], a['found']['line'], a['found']['none'], a['found']['total']), (1, 0, 1, 2))
@@ -137,9 +142,9 @@ class TestWorksetClient(TransactionCase):
         Card = self._as(self.Partner, editor)
         data = Card.workset_client_card(self.cust.id)
         items = {i['key']: i for i in data['contract']['items']}
-        self.assertEqual(list(items), ['contract', 'scan', 'payment_term', 'sign', 'site_contact', 'site_address', 'note'])
-        self.assertTrue(all(i['empty'] for i in items.values()), 'порожні поля договору — жовті ознаки')
-        self.assertEqual(data['contract']['missing'], 7)
+        self.assertEqual(list(items), ['contract', 'scan', 'payment_term', 'withdraw', 'sign', 'site_contact', 'site_address', 'note'])
+        self.assertTrue(all(i['empty'] for i in items.values()), 'порожні поля договору — жовті ознаки (і «Відсоток за виведення» — «не внесено»)')
+        self.assertEqual(data['contract']['missing'], 8)
         self.assertTrue(items['contract']['empty_text'] and items['payment_term']['empty_text'])
         self.assertFalse(data['partner']['checked']['ok'], 'не перевірено — жовтий чип')
         self.assertTrue(data['can_edit'])
@@ -162,6 +167,7 @@ class TestWorksetClient(TransactionCase):
                          'строк оплати — стандартне поле контакту; лише фірма, де він заданий (без «—» для решти)')
         self.assertEqual((items['sign']['value'], items['site_contact']['value']), ('Contact K1a', 'Contact K1b'))
         self.assertEqual(data['money']['withdraw'], 2.5)
+        self.assertEqual(items['withdraw']['value'], '2,5 %')
         self.assertTrue(data['partner']['checked']['ok'])
         self.assertEqual(data['partner']['checked']['who'], editor.name)
         self.assertEqual(self.cust.sudo().workset_client_checked_by_id, editor)
@@ -243,7 +249,7 @@ class TestWorksetClient(TransactionCase):
         self.assertLessEqual(len(d['changes']), calc.CHANGES_MAX)
         self.assertEqual([c['at'] for c in d['changes']], sorted((c['at'] for c in d['changes']), reverse=True), 'найсвіжіші — першими')
         # усі події до обрізання (у тій самій секунді їх може бути більше десяти — порядок між ними не перевіряємо)
-        with patch.object(calc, 'changes_top', side_effect=lambda items, limit=calc.CHANGES_MAX: items):
+        with patch.object(calc, 'changes_top', side_effect=lambda items, limit=calc.CHANGES_MAX, lang='uk': items):
             full = self.Partner.workset_client_card(self.cust.id)['changes']
         own = [c for c in full if c['new'] == 'K1-A']
         self.assertEqual(len(own), 1, 'трекінг свого поля — «було → стало»')
@@ -448,3 +454,36 @@ class TestWorksetClient(TransactionCase):
         editor = self._user('ws_client_forge_editor', 'base.group_user,workset_client.group_editor,base.group_partner_manager')
         rec = self._as(self.Partner, editor).with_context(default_workset_client_checked_date='2030-01-01').create({'name': 'Forged K1v editor'})
         self.assertEqual(str(rec.sudo().workset_client_checked_date), '2030-01-01')
+
+    # ═══ К1г ═══
+    def test_changes_collapse_same_kind(self):
+        # два правила житла замовника (періоди не перетинаються) + правило лінії з setUpClass: однотипні «створено» одного автора за день —
+        # один рядок «Житло: правило створено — N змін»
+        Housing = self.env['workset.line.housing']
+        for date_from, date_to in (('2029-02-01', '2029-02-28'), ('2029-03-01', '2029-03-31')):
+            Housing.create({'line_id': self.line.id, 'customer_id': self.cust.id, 'kind': 'payment_buffer', 'payer': 'we_buffer',
+                            'date_from': date_from, 'date_to': date_to, 'source': 'owner', 'source_note': 'test housing K1g'})
+        rows = self.Partner.workset_client_card(self.cust.id)['changes']
+        groups = [c for c in rows if c['count'] > 1 and 'Житло' in c['what']]
+        self.assertTrue(groups, 'однотипні зміни згорнуті в один рядок')
+        g = groups[0]
+        self.assertGreaterEqual(g['count'], 3)
+        self.assertEqual(len(g['items']), g['count'])
+        self.assertRegex(g['count_text'], r'^\d+ змін[иа]?$')
+        self.assertTrue(all(i['open'] and i['open']['model'] == 'workset.line.housing' for i in g['items']), 'кожна зміна в списку відкривається')
+        self.assertFalse(g['open'], 'у згорнутого рядка немає свого кліку — клік розкриває список')
+        self.assertFalse(any(re.search(r'\d{4}-\d{2}-\d{2}', i['record'] or '') for c in rows for i in c['items'] + [c]),
+                         'у назвах записів теж ДД.ММ.РРРР')
+
+    def test_list_missing_and_no_line(self):
+        c = self.cust
+        self.assertEqual(c.workset_client_missing_text, 'договір, термін, перевірка', 'нічого немає — три пункти')
+        self.assertTrue(c.workset_client_has_line)
+        editor = self._user('ws_client_missing_editor', 'base.group_user,workset_client.group_editor')
+        self._as(c, editor).workset_client_mark_checked()
+        c.sudo().write({'workset_client_contract_no': 'K1G-1'})
+        c.invalidate_recordset()
+        self.assertEqual(c.workset_client_missing_text, 'термін', 'договір і перевірка є — лишається термін')
+        lonely = self.Partner.create({'name': 'Customer K1g lonely', 'is_company': True})
+        self.assertFalse(lonely.workset_client_has_line)
+        self.assertEqual(lonely.workset_client_line_text, 'без лінії')

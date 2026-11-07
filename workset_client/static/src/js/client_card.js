@@ -75,7 +75,7 @@ export class ClientCard extends Component {
         this.orm = useService("orm");
         this.action = useService("action");
         this.notification = useService("notification");
-        this.state = useState({ data: null, failed: false, pick: false });
+        this.state = useState({ data: null, failed: false, pick: false, groups: {} });
         this.serial = 0;
         this.money = money;
         this.plain = plain;
@@ -143,6 +143,7 @@ export class ClientCard extends Component {
         const data = await this.fetch([this.partnerId || false, this.period, this.month || false, this.lineId || false]);
         if (data) {
             this.keep(data);
+            this.state.groups = {};
             this.state.data = data;
             this.save();
             this.setName(data);
@@ -168,6 +169,19 @@ export class ClientCard extends Component {
 
     togglePick() {
         this.state.pick = !this.state.pick;
+    }
+
+    /** «Останні зміни»: рядок «Ставка: Хто платить агенту — 6 змін ›» розкривається в список цих змін (index — номер рядка). */
+    toggleGroup(index) {
+        this.state.groups[index] = !this.state.groups[index];
+    }
+
+    keyGroup(ev, index) {
+        if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.toggleGroup(index);
+        }
     }
 
     /** Ім'я дії — назва замовника (хлібна крихта й вкладка після F5 чи прямого URL), як картка лінії «Прибутковості». */

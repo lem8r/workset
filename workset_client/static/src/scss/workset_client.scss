@@ -74,15 +74,8 @@
         white-space: pre-line;
         overflow-wrap: anywhere;
     }
-    // номер рядка «№» — вузька сіра колонка по правому краю (слово власника 07.11: «вопрос по номеру 3»)
-    .o_workset_client_no {
-        color: $gray-500;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-        min-width: 1.5rem;
-        margin-right: map-get($spacers, 2);
-    }
-    // нумерація рядків списків картки — лічильник CSS (рядки з умовами й перемикачами нумеруються тими, що на екрані); заголовок «№» не лічиться
+    // нумерація рядків списків картки — лічильник CSS (слово власника 07.11: «вопрос по номеру 3»); окремої шапки з «№» немає, номер — у самому
+    // рядку; «Що з цього виходить» — ланцюжок розрахунку — без номерів
     .o_workset_client_rows {
         counter-reset: workset-client-row;
     }
@@ -161,6 +154,10 @@
         }
         .o_workset_client_band {
             grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+        // «Відсоток за виведення» не задано — клітинки немає, лишається чотири
+        .o_workset_client_band.o_workset_client_band_four {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
         }
         // п'ять в ряд: роздільник перед кожною колонкою, крім першої
         .o_workset_client_band_cell {

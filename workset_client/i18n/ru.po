@@ -43,7 +43,6 @@ msgstr "Скан договора"
 #. module: workset_client
 #: model:ir.model.fields,field_description:workset_client.field_workset_client_terms__payment_term_id
 #: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_term_text
-#: model_terms:ir.ui.view,arch_db:workset_client.view_partner_client_list
 msgid "Термін оплати"
 msgstr "Срок оплаты"
 
@@ -109,7 +108,6 @@ msgstr "Контакт заказчика, который подписывает
 #. module: workset_client
 #. odoo-javascript
 #: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_checked_date
-#: model_terms:ir.ui.view,arch_db:workset_client.view_partner_client_list
 #: code:addons/workset_client/static/src/xml/client_card.xml:0
 msgid "Перевірено"
 msgstr "Проверено"
@@ -168,7 +166,6 @@ msgstr "Договор есть"
 
 #. module: workset_client
 #: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_contract_text
-#: model_terms:ir.ui.view,arch_db:workset_client.view_partner_client_list
 msgid "Договір"
 msgstr "Договор"
 
@@ -186,6 +183,22 @@ msgstr "Срок оплаты задан хотя бы в одной фирме"
 #: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_checked_text
 msgid "Перевірено коли"
 msgstr "Когда проверено"
+
+#. module: workset_client
+#: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_missing_text
+#: model_terms:ir.ui.view,arch_db:workset_client.view_partner_client_list
+msgid "Бракує"
+msgstr "Не хватает"
+
+#. module: workset_client
+#: model:ir.model.fields,help:workset_client.field_res_partner__workset_client_missing_text
+msgid "Чого бракує в умовах клієнта: договір, термін оплати, перевірка"
+msgstr "Чего не хватает в условиях клиента: договор, срок оплаты, проверка"
+
+#. module: workset_client
+#: model:ir.model.fields,field_description:workset_client.field_res_partner__workset_client_has_line
+msgid "Лінія є"
+msgstr "Линия есть"
 
 #. module: workset_client
 #: model:res.groups.privilege,name:workset_client.res_groups_privilege_client
@@ -250,8 +263,8 @@ msgstr "Линия"
 
 #. module: workset_client
 #: model_terms:ir.ui.view,arch_db:workset_client.view_partner_client_list
-msgid "Частка сер., € год"
-msgstr "Доля ср., € ч"
+msgid "Частка, сер."
+msgstr "Доля, ср."
 
 #. module: workset_client
 #: model_terms:ir.ui.view,arch_db:workset_client.view_partner_client_search
@@ -351,8 +364,8 @@ msgstr "Доля WorkSET"
 #. module: workset_client
 #. odoo-javascript
 #: code:addons/workset_client/static/src/xml/client_card.xml:0
-msgid "сер. за ставками"
-msgstr "сред. по ставкам"
+msgid "сер. за ставками цього замовника"
+msgstr "сред. по ставкам этого заказчика"
 
 #. module: workset_client
 #. odoo-javascript
@@ -515,6 +528,12 @@ msgstr "Предыдущий период"
 #: code:addons/workset_client/static/src/xml/client_card.xml:0
 msgid "Наступний період"
 msgstr "Следующий период"
+
+#. module: workset_client
+#. odoo-javascript
+#: code:addons/workset_client/static/src/xml/client_card.xml:0
+msgid "уся лінія"
+msgstr "вся линия"
 
 #. module: workset_client
 #. odoo-javascript

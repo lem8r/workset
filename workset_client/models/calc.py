@@ -6,9 +6,12 @@
 rcalc.housing_pick («Ставки»), «Хто платить» — pcalc.cost_rule_pick, картки DKV — pcalc.card_period, загальна ставка — rcalc.rule_pick,
 домовленості агентів — rcalc.deal_fits; місяці й гроші — pcalc. Тести без Odoo (tools/odoo_addon_calc.py з alias) підставляють файли
 сусідів під їхніми іменами в Odoo; інших файлів модуля цей файл не імпортує. Гроші — EUR, знак як у книгах: витрата — мінус."""
+import re
+
 from odoo.addons.workset_profit.models import calc as pcalc
 from odoo.addons.workset_rates.models import calc as rcalc
 
+ISO_DATE = re.compile(r'\b(\d{4})-(\d{2})-(\d{2})\b')  # «2026-01-01» у текстах з назв записів → «01.01.2026»
 PAY_KINDS = ('housing', 'transport', 'fuel', 'tool', 'auto', 'car_rent', 'fund')  # рядки «Хто платить» — у порядку макета
 COST_KINDS = ('transport', 'fuel', 'tool', 'auto')   # з правил «Хто платить» (workset.line.cost.rule); житло — з правил житла «Ставок»
 PERIODS = ('month', 'quarter', 'year')               # перемикач «Місяць | Квартал | Рік» блоку «Що з цього виходить»
@@ -18,7 +21,7 @@ PROFIT_ROWS = (('share', ('share',)), ('car_rent', ('car_rent',)), ('housing', (
                ('fuel', ('fuel',)), ('tool', ('tool',)), ('transport', ('transport',)))
 # «Договір і оплата»: ключ, підпис, що писати, коли порожньо («не внесено» — документ чи текст, «не задано» — налаштування)
 CONTRACT = (('contract', 'c_contract', 'e_none'), ('scan', 'c_scan', 'e_none'), ('payment_term', 'c_term', 'e_unset'),
-            ('sign', 'c_sign', 'e_unset'), ('site_contact', 'c_contact', 'e_unset'), ('site_address', 'c_address', 'e_none'),
+            ('withdraw', 'c_withdraw', 'e_none'), ('sign', 'c_sign', 'e_unset'), ('site_contact', 'c_contact', 'e_unset'), ('site_address', 'c_address', 'e_none'),
             ('note', 'c_note', 'e_none'))
 QUARTERS = ('I', 'II', 'III', 'IV')
 
@@ -41,11 +44,12 @@ TX = {
     'lvl_customer': ['правило замовника', 'правило заказчика'], 'lvl_line': ['правило лінії', 'правило линии'],
     'per_hour': ['€ год', '€ ч'],
     # «Агент і хто знайшов»
-    'f_text': ['ми %d · лінія %d', 'мы %d · линия %d'], 'f_missing': ['не вказано у %d з %d', 'не указано в %d из %d'],
+    'f_us': ['ми %d', 'мы %d'], 'f_line': ['лінія %d', 'линия %d'], 'f_missing': ['не вказано у %d з %d', 'не указано в %d из %d'],
     'ag_module': ['модуль агентів не встановлено', 'модуль агентов не установлен'], 'ag_none': ['немає', 'нет'],
     # «Договір і оплата»
     'c_contract': ['№ договору', '№ договора'], 'c_scan': ['Скан договору', 'Скан договора'], 'c_term': ['Термін оплати', 'Срок оплаты'],
     'c_sign': ['Табель погоджує', 'Табель согласует'], 'c_contact': ["Контакт на об'єкті", 'Контакт на объекте'],
+    'c_withdraw': ['Відсоток за виведення', 'Процент за вывод'],
     'c_address': ["Адреса об'єкта", 'Адрес объекта'], 'c_note': ['Особливі домовленості', 'Особые договорённости'],
     'e_none': ['не внесено', 'не внесено'], 'e_unset': ['не задано', 'не задано'],
     'c_no_date': ['№ %s від %s', '№ %s от %s'], 'c_no': ['№ %s', '№ %s'], 'c_date': ['від %s', 'от %s'], 'c_files': ['файлів: %d', 'файлов: %d'],
@@ -73,6 +77,10 @@ TX = {
     'ag_rates': ['посередник у ставках', 'посредник в ставках'],
     'o_agent_rates': ['Ставки з посередником: %s', 'Ставки с посредником: %s'],
     'l_yes': ['є', 'есть'], 'l_checked_no': ['не перевірено', 'не проверено'],
+    # К1г: «Звідки правило» коротко, зміни одним рядком, колонки «Лінія» й «Бракує» списку
+    'n_changes': [('%d зміна', '%d зміни', '%d змін'), ('%d изменение', '%d изменения', '%d изменений')],
+    'no_line': ['без лінії', 'без линии'],
+    'miss_contract': ['договір', 'договор'], 'miss_term': ['термін', 'срок'], 'miss_check': ['перевірка', 'проверка'],
 }
 
 
@@ -106,19 +114,20 @@ def share_avg(values):
 
 
 def found_info(values, lang='uk'):
-    """«Хто знайшов людей» по діючих ставках (values — found_by кожної): «ми N · лінія M» і, якщо в частини не вказано, «не вказано у
-    K з N» (жовтим). Лічба — rcalc.found_split «Ставок». → {'us', 'line', 'none', 'total', 'text', 'missing' ('' — усе вказано)}."""
+    """«Хто знайшов людей» по діючих ставках (values — found_by кожної): «ми N · лінія M» — лише ненульові частини (обидві нуль — '') і,
+    якщо в частини не вказано, «не вказано у K з N» (жовтим). Лічба — rcalc.found_split «Ставок».
+    → {'us', 'line', 'none', 'total', 'text', 'missing' ('' — усе вказано)}."""
     values = list(values or [])
     s = rcalc.found_split(values)
     total = len(values)
-    return dict(s, total=total, text=t('f_text', lang) % (s['us'], s['line']),
+    parts = [t(key, lang) % s[k] for key, k in (('f_us', 'us'), ('f_line', 'line')) if s[k]]
+    return dict(s, total=total, text=' · '.join(parts),
                 missing=t('f_missing', lang) % (s['none'], total) if s['none'] else '')
 
 
-def more_lines_text(n, lang='uk'):
-    """«ще 1 лінія ›» / «ще 3 лінії ›» / «ще 5 ліній ›» (російською — «ещё 1 линия / 3 линии / 5 линий»)."""
+def plural_form(forms, n):
+    """Форма за числом: 1 / 2–4 / 5+ (11–14 — як 5+); forms — (одна, кілька, багато), у кожній %d."""
     n = int(n)
-    forms = TX['more_lines'][1 if lang == 'ru' else 0]
     if n % 10 == 1 and n % 100 != 11:
         form = forms[0]
     elif 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
@@ -126,6 +135,26 @@ def more_lines_text(n, lang='uk'):
     else:
         form = forms[2]
     return form % n
+
+
+def more_lines_text(n, lang='uk'):
+    """«ще 1 лінія ›» / «ще 3 лінії ›» / «ще 5 ліній ›» (російською — «ещё 1 линия / 3 линии / 5 линий»)."""
+    return plural_form(TX['more_lines'][1 if lang == 'ru' else 0], n)
+
+
+def changes_count_text(n, lang='uk'):
+    """«1 зміна» / «3 зміни» / «6 змін» (російською — «1 изменение / 3 изменения / 6 изменений»)."""
+    return plural_form(TX['n_changes'][1 if lang == 'ru' else 0], n)
+
+
+def missing_text(has_contract, has_term, checked, lang='uk'):
+    """Колонка «Бракує» списку: чого немає — «договір, термін, перевірка»; усе є — '' (порожня клітинка)."""
+    return ', '.join(t(key, lang) for key, ok in (('miss_contract', has_contract), ('miss_term', has_term), ('miss_check', checked)) if not ok)
+
+
+def line_text(names, lang='uk'):
+    """Колонка «Лінія» списку: назви ліній через кому; ліній немає — «без лінії» (у виді — сірим)."""
+    return ', '.join(names or []) or t('no_line', lang)
 
 
 def min_share(rules, rule_min, line_id, cust_id, day, default=0.0, line_min=0.0):
@@ -199,7 +228,7 @@ def card_list(periods, cards, line_id, cust_id, day):
     return sorted(out, key=lambda c: (c['name'], c['id']))
 
 
-def pays_rows(src, line_id, cust_id, day, labels, lang='uk'):
+def pays_rows(src, line_id, cust_id, day, labels, lang='uk', line_name=''):
     """«Хто платить» замовника на day — рядки PAY_KINDS. src — дані, прочитані раз на запит:
       'housing_rules' (workset.line.housing._rules() «Ставок»), 'housing' — {id: {'payer', 'kind', 'amount', 'unit', 'date_from',
       'source', 'source_note', 'customer_id'}}; 'cost_rules' — [{'id', 'line_id', 'customer_id', 'kind', 'payer', 'date_from',
@@ -209,7 +238,9 @@ def pays_rows(src, line_id, cust_id, day, labels, lang='uk'):
     labels — підписи значень вибору моделей (перекладені): 'housing_payer', 'housing_kind', 'unit', 'source', 'cost_payer', 'per_hour'.
     Перевезення, паливо, інструмент, авто — pcalc.cost_rule_pick (правило замовника точніше за правило лінії); правила немає — «Ми
     (правила немає)» сірим. Паливо — ще картки DKV (card_list: 'cards' — назви, 'card_ids', 'cards_text'). Оренда авто — «Оренда авто» загальної ставки пари; 0 — «не діє».
-    Фонд працівників — домовленість фонду (rcalc.deal_fits) або частка фонду в ставках; немає — «не діє»."""
+    Фонд працівників — домовленість фонду (rcalc.deal_fits) або частка фонду в ставках; немає — «не діє».
+    К1г: до кожного рядка — 'source_text' («правило лінії <line_name>» / «правило замовника»; повний текст правила лишається в 'source' — для
+    підказки) і 'hidden' (оренда авто й фонд зі словом «не діє» на екрані не показуються — pays_shown)."""
     out = [housing_row(src, line_id, cust_id, day, labels, lang)]
     rules = src.get('cost_rules') or []
     for kind in COST_KINDS:
@@ -232,7 +263,8 @@ def pays_rows(src, line_id, cust_id, day, labels, lang='uk'):
                         source=rr.get('source_note') or '', level='customer' if rr.get('customer_id') else 'line',
                         rule={'model': 'rate_rule', 'id': rr['id'], 'kind': ''}))
     else:
-        out.append(_row('car_rent', lang, t('not_active', lang), 'muted', rule={'model': 'rate_rule', 'id': rr['id'], 'kind': ''} if rr else None))
+        out.append(dict(_row('car_rent', lang, t('not_active', lang), 'muted', rule={'model': 'rate_rule', 'id': rr['id'], 'kind': ''} if rr else None),
+                        hidden=True))
     deals = [d for d in src.get('fund_deals') or [] if rcalc.deal_fits(d, rcalc.FUND_KIND, cust_id, line_id, day)]
     fund_rates = [round(float(v), 2) for v in src.get('fund_rates') or [] if v and float(v) > 0]
     if deals:
@@ -246,8 +278,24 @@ def pays_rows(src, line_id, cust_id, day, labels, lang='uk'):
         out.append(_row('fund', lang, t('fund_rates', lang), amount=share_avg(fund_rates), unit=labels.get('per_hour') or '',
                         rule={'model': 'fund_rates', 'id': 0, 'kind': ''}))
     else:
-        out.append(_row('fund', lang, t('not_active', lang), 'muted'))
+        out.append(dict(_row('fund', lang, t('not_active', lang), 'muted'), hidden=True))
+    for row in out:
+        row.setdefault('hidden', False)
+        row['source_text'] = source_short(row['level'], line_name, lang)
     return out
+
+
+def source_short(level, line_name, lang='uk'):
+    """«Звідки правило» коротко: «правило лінії <лінія>» / «правило замовника» (замовник у шапці; дата — у колонці «З якого числа»);
+    правила немає — ''."""
+    if not level:
+        return ''
+    return t('lvl_' + level, lang) + (' ' + line_name if level == 'line' and line_name else '')
+
+
+def pays_shown(rows):
+    """Рядки «Хто платить», які показує екран: без прихованих («не діє»); нумерація на екрані йде підряд."""
+    return [r for r in rows or [] if not r.get('hidden')]
 
 
 # ——— «Агент і хто знайшов» ———
@@ -267,7 +315,7 @@ def agent_items(deals, cust_id, line_id, day):
 # ——— «Договір і оплата» ———
 def contract_items(values, lang='uk'):
     """Пункти «Договір і оплата»: values — {'contract_no', 'contract_date' («РРРР-ММ-ДД»), 'scan' (скільки файлів), 'payment_term', 'sign',
-    'site_contact', 'site_address', 'note'} (назви — уже текстом). Порожнє — 'empty' і що писати жовтим («не внесено» / «не задано»).
+    'withdraw' (відсоток за виведення, число), 'site_contact', 'site_address', 'note'} (назви — уже текстом). Порожнє — 'empty' і що писати жовтим («не внесено» / «не задано»).
     → [{'key', 'label', 'value', 'empty', 'empty_text'}] у порядку CONTRACT."""
     v = values or {}
     no, day = str(v.get('contract_no') or '').strip(), rcalc.fmt_date(v.get('contract_date'))
@@ -277,7 +325,9 @@ def contract_items(values, lang='uk'):
         contract = t('c_no', lang) % no if no else t('c_date', lang) % day
     else:
         contract = ''
-    text = {'contract': contract, 'scan': t('c_files', lang) % int(v['scan']) if v.get('scan') else ''}
+    pct = round(float(v.get('withdraw') or 0), 2)
+    text = {'contract': contract, 'scan': t('c_files', lang) % int(v['scan']) if v.get('scan') else '',
+            'withdraw': pcalc.num_text(pct) + ' %' if pct else ''}
     out = []
     for key, label, empty in CONTRACT:
         value = text[key] if key in text else str(v.get(key) or '').strip()
@@ -376,8 +426,33 @@ def track_value(ttype, value, lang='uk'):
     return str(value)
 
 
-def changes_top(items, limit=CHANGES_MAX):
-    """«Останні зміни»: події з усіх джерел (трекінг полів, створення правил) — найсвіжіші limit; items — [{'at' («РРРР-ММ-ДД ГГ:ХХ:СС»
-    у поясі користувача), …}], рівні за часом — як прийшли. До кожної — 'date' («ДД.ММ.РРРР»)."""
+def ui_dates(text):
+    """Дати «РРРР-ММ-ДД» у тексті (назви записів, значення) → «ДД.ММ.РРРР»: на екрані одна форма дат."""
+    return ISO_DATE.sub(lambda m: '%s.%s.%s' % (m.group(3), m.group(2), m.group(1)), str(text or ''))
+
+
+def changes_top(items, limit=CHANGES_MAX, lang='uk'):
+    """«Останні зміни»: події з усіх джерел (трекінг полів, створення правил) — найсвіжіші limit рядків; items — [{'at' («РРРР-ММ-ДД
+    ГГ:ХХ:СС» у поясі користувача), 'what', 'who', 'record', 'old', 'new', 'open'}], рівні за часом — як прийшли. До кожної — 'date'
+    («ДД.ММ.РРРР»); дати «РРРР-ММ-ДД» у 'what', 'record', 'old', 'new' — теж «ДД.ММ.РРРР».
+    К1г: підряд ідучі однотипні правки (те саме 'what', той самий автор, той самий день) — один рядок: 'count' (скільки), 'count_text'
+    («6 змін»), 'items' — [{'record', 'old', 'new', 'open'}] кожної; 'at' — найсвіжішої; сам рядок без 'old' / 'new' / 'record' / 'open'.
+    Одинока правка — count 1, items []."""
     ordered = [x for _i, x in sorted(enumerate(items or []), key=lambda p: (str(p[1].get('at') or ''), -p[0]), reverse=True)]
-    return [dict(x, date=rcalc.fmt_date(str(x.get('at') or '')[0:10])) for x in ordered[:limit]]
+    rows = []
+    for x in ordered:
+        x = dict(x, date=rcalc.fmt_date(str(x.get('at') or '')[0:10]), what=ui_dates(x.get('what')), record=ui_dates(x.get('record')),
+                 old=ui_dates(x.get('old')), new=ui_dates(x.get('new')))
+        last = rows[-1] if rows else None
+        if last and x['what'] and (last['what'], last.get('who'), last['date']) == (x['what'], x.get('who'), x['date']):
+            last['items'].append({k: x.get(k) for k in ('record', 'old', 'new', 'open')})
+            continue
+        rows.append(dict(x, count=1, items=[{k: x.get(k) for k in ('record', 'old', 'new', 'open')}]))
+    out = []
+    for r in rows[:limit]:
+        if len(r['items']) > 1:
+            r.update(count=len(r['items']), count_text=changes_count_text(len(r['items']), lang), record='', old='', new='', open=False)
+        else:
+            r['items'] = []
+        out.append(r)
+    return out

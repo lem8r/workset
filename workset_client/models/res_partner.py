@@ -67,6 +67,10 @@ class ResPartner(models.Model):
                                              search='_search_workset_client_has_term', groups=GROUP_VIEWER,
                                              help='Строк оплати заданий хоча б в одній фірмі')
     workset_client_checked_text = fields.Char(string='Перевірено коли', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
+    # К1г: одна колонка «Бракує» замість трьох жовтих («договір, термін, перевірка»; усе є — порожньо) і ознака «лінія є» (без неї — сіре «без лінії»)
+    workset_client_missing_text = fields.Char(string='Бракує', compute='_compute_workset_client_list', groups=GROUP_VIEWER,
+                                              help='Чого бракує в умовах клієнта: договір, термін оплати, перевірка')
+    workset_client_has_line = fields.Boolean(string='Лінія є', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
 
     # ——— права ———
     def _workset_client_can_edit(self):
@@ -207,7 +211,8 @@ class ResPartner(models.Model):
             lines, rates = idx['lines'].get(cid, []), idx['rates'].get(cid, [])
             c = p.sudo().commercial_partner_id
             p.workset_client_is_customer = bool(lines or rates)
-            p.workset_client_line_text = ', '.join(x.display_name for x in lines)
+            p.workset_client_line_text = calc.line_text([x.display_name for x in lines], lang)
+            p.workset_client_has_line = bool(lines)
             p.workset_client_rate_count = len(rates)
             p.workset_client_share_avg = calc.share_avg([r.our_share for r in rates]) or 0.0
             p.workset_client_housing_text = calc.housing_row(src, lines[0].id, cid, today, labels, lang)['payer'] if lines else ''
@@ -218,6 +223,7 @@ class ResPartner(models.Model):
             p.workset_client_has_term = terms['any']
             p.workset_client_term_text = ', '.join(terms['names']) if terms['any'] else calc.t('e_unset', lang)
             p.workset_client_checked_text = calc.checked_info(c.workset_client_checked_date, '')['date'] or calc.t('l_checked_no', lang)
+            p.workset_client_missing_text = calc.missing_text(has, terms['any'], bool(c.workset_client_checked_date), lang)
 
     # ——— дії ———
     def action_workset_client_card(self):

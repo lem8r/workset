@@ -22,26 +22,23 @@
 
     <!-- «Умови клієнтів»: замовники з «Замовників» ліній або з діючими ставками; рядок відкриває екран «Умови клієнта» (js_class —
          static/src/js/client_card.js), не форму контакту. Без «Створити», правки й видалення: умови правлять в екрані й у джерелах.
-         Порожнє — жовтим словом («не внесено», «не задано», «не перевірено»), а не порожньою клітинкою -->
+         Чого бракує — одна колонка «Бракує» жовтим («договір, термін, перевірка»), усе є — порожньо; фільтри по кожній ознаці лишились -->
     <record id="view_partner_client_list" model="ir.ui.view">
         <field name="name">res.partner.list.workset.client</field>
         <field name="model">res.partner</field>
         <field name="priority">100</field>
         <field name="arch" type="xml">
             <list string="Умови клієнтів" js_class="workset_client_list" create="0" edit="0" delete="0" default_order="name">
-                <field name="workset_client_has_contract" column_invisible="1"/>
-                <field name="workset_client_checked_date" column_invisible="1"/>
-                <field name="workset_client_has_term" column_invisible="1"/>
+                <field name="workset_client_has_line" column_invisible="1"/>
                 <!-- «№» — номер рядка на екрані: переносний віджет «Прибутковості» 19.0.6 (workset_profit/static/src/js/row_number.js), серим -->
                 <field name="id" string="№" widget="workset_profit_row_number" readonly="1" width="50px"/>
-                <field name="name" string="Замовник"/>
-                <field name="workset_client_line_text" string="Лінія"/>
-                <field name="workset_client_rate_count" string="Ставок діє"/>
-                <field name="workset_client_share_avg" string="Частка сер., € год"/>
+                <field name="name" string="Замовник" width="280px"/>
+                <field name="workset_client_line_text" string="Лінія" width="170px" decoration-muted="not workset_client_has_line"/>
+                <field name="workset_client_rate_count" string="Ставок діє" width="100px"/>
+                <field name="workset_client_share_avg" string="Частка, сер." width="110px"/>
                 <field name="workset_client_housing_text" string="Житло — хто платить"/>
-                <field name="workset_client_contract_text" string="Договір" decoration-warning="not workset_client_has_contract"/>
-                <field name="workset_client_term_text" string="Термін оплати" decoration-warning="not workset_client_has_term"/>
-                <field name="workset_client_checked_text" string="Перевірено" decoration-warning="not workset_client_checked_date"/>
+                <!-- К1г: одна колонка замість «Договір», «Термін оплати», «Перевірено»; усе є — порожня клітинка -->
+                <field name="workset_client_missing_text" string="Бракує" width="260px" decoration-warning="workset_client_missing_text"/>
             </list>
         </field>
     </record>
