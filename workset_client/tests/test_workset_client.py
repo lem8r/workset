@@ -284,19 +284,18 @@ class TestWorksetClient(TransactionCase):
         Att = self.env['ir.attachment'].sudo()
         foreign = Att.create({'name': 'k1b-foreign.txt', 'raw': b'y', 'res_model': 'res.partner', 'res_id': self.other.id})
         stranger = Att.create({'name': 'k1b-stranger.txt', 'raw': b'z', 'res_model': 'workset.client.terms', 'res_id': 0})  # створив не editor
-        plain = self._user('ws_client_scan_editor2', 'base.group_user,workset_client.group_editor')
-        with self.assertRaises(AccessError):
-            self._wizard(plain, scan_ids=[(6, 0, [foreign.id])])
-        manager = self._user('ws_client_scan_editor3', 'base.group_user,workset_client.group_editor,base.group_partner_manager')
-        try:
-            wizard = self._wizard(manager, scan_ids=[(6, 0, [foreign.id, stranger.id])])
-        except AccessError:
-            wizard = None  # ORM зупинив раніше за наш код — теж закрито
-        if wizard:
-            wizard.action_save()
-        self.assertFalse(self.cust.sudo().workset_client_contract_scan_ids, 'чужі вкладення не стали сканами замовника')
-        self.assertEqual((foreign.res_model, foreign.res_id), ('res.partner', self.other.id), 'чужий файл не перепривʼязано')
-        self.assertEqual((stranger.res_model, stranger.res_id), ('workset.client.terms', 0))
+        # Спроба в try: AccessError від ORM — прийнятно; ORM пропустив — тоді обовʼязково відсікає _own_scans. Утвердження нижче — в обох випадках
+        for login, groups in (('ws_client_scan_editor2', 'base.group_user,workset_client.group_editor'),
+                              ('ws_client_scan_editor3', 'base.group_user,workset_client.group_editor,base.group_partner_manager')):
+            editor = self._user(login, groups)
+            try:
+                wizard = self._wizard(editor, scan_ids=[(6, 0, [foreign.id, stranger.id])])
+                wizard.action_save()
+            except AccessError:
+                pass  # ORM зупинив раніше за наш код — теж закрито
+            self.assertFalse(self.cust.sudo().workset_client_contract_scan_ids, '%s: чужі вкладення не стали сканами замовника' % login)
+            self.assertEqual((foreign.res_model, foreign.res_id), ('res.partner', self.other.id), '%s: чужий файл не перепривʼязано' % login)
+            self.assertEqual((stranger.res_model, stranger.res_id), ('workset.client.terms', 0), login)
 
     # Б2: default_get лише редактору
     def test_default_get_only_editor(self):
@@ -324,8 +323,9 @@ class TestWorksetClient(TransactionCase):
         items = {i['key']: i for i in self.Partner.workset_client_card(self.cust.id)['contract']['items']}
         self.assertFalse(items['payment_term']['empty'])
         self.assertIn(term.display_name, items['payment_term']['value'])
-        wizard = self._wizard(self.env.user)
-        self.assertIn(self.env.company.name, wizard.company_note, 'у «Заповнити» — «для фірми X»')
+        # майстер працює у фірмі контексту: запускаємо його саме у перевірюваній фірмі
+        wizard = self.env['workset.client.terms'].with_company(self.co).with_context(default_partner_id=self.cust.id).create({})
+        self.assertIn(self.co.name, wizard.company_note, 'у «Заповнити» — «для фірми X»')
 
     # п. 4, п. 10: періоди «Рік» і «Квартал» — до останнього закритого місяця
     def test_period_year_and_quarter_stop_at_last_closed(self):
