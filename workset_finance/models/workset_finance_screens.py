@@ -26,7 +26,10 @@ calc.merge_domain).
 
 Круг 3б (ревю 3): «не оплачено» — залишок тих самих рахунків на сьогодні (_unpaid_now, лише читання, підпис «на сьогодні»; без права
 читати рахунки — збережений на дату перерахунку, «на ДД.ММ»); клік стандартної моделі — свій список із колонкою «№» (CLICK_VIEWS);
-«Прибутковість ліній →» — за обраним періодом."""
+«Прибутковість ліній →» — за обраним періодом.
+
+Круг 3в (ревю 3б): «не оплачено» — залишок у валюті фірми (amount_residual_signed, EUR за курсом проводки), у списку рахунків кліку — та сама
+колонка з сумою; свої види кліків — priority 1000; «Прибутковість ліній →» у році й періоді — підказка про межі М3."""
 import json
 
 from odoo import api, fields, models
@@ -47,7 +50,8 @@ PROFIT_GROUP = 'workset_profit.group_viewer'
 PROFIT_TAG = 'workset_profit.overview'
 CLICK_COS = 'workset_finance_click_cos'   # ключ контексту: фірми списку кліку (calc.click_companies), рахуються раз на виклик екрана
 # круг 3б (правило власника 07.11 — «№» у кожному списку): клік, що відкриває стандартну модель, — свій список від штатного з колонкою «№»
-# (views/workset_finance_screens_views.xml, priority 99 — штатний вид моделі за замовчуванням не змінюється); моделі тут немає — штатний вид
+# (views/workset_finance_screens_views.xml, priority 1000 — штатний вид моделі за замовчуванням не змінюється, навіть якщо в якогось штатного
+# списку priority ≥ 100; круг 3в); моделі тут немає — штатний вид
 CLICK_VIEWS = {
     'account.move.line': 'workset_finance.view_click_move_line_list',
     'account.analytic.line': 'workset_finance.view_click_analytic_line_list',
@@ -81,16 +85,17 @@ class WorksetFinanceScreens(models.Model):
 
     def _unpaid_now(self, ids):
         """«Не оплачено» на сьогодні (круг 3б): рахунки, які перерахунок відніс до кошика (ids), — їхній залишок зараз за правилами
-        перерахунку (calc.unpaid_now: amount_residual, як _unpaid), правами користувача й по фірмах списку кліку (CLICK_COS) — число = списку
-        кліку (рахунок, оплачений після перерахунку, зникає з обох). Лише читання. Рядки кошика не з рахунків (ids None) чи немає права читати
-        рахунки — None: екран показує збережений залишок на дату перерахунку, як до круга 3б."""
+        перерахунку (calc.unpaid_now: amount_residual_signed — у валюті фірми, як _unpaid, круг 3в), правами користувача й по фірмах списку
+        кліку (CLICK_COS) — число = списку кліку (колонка «Не оплачено, €» свого виду рахунків; рахунок, оплачений після перерахунку, зникає з
+        обох). Лише читання. Рядки кошика не з рахунків (ids None) чи немає права читати рахунки — None: екран показує збережений залишок на
+        дату перерахунку, як до круга 3б."""
         Move = self.env['account.move']
         if ids is None or not Move.has_access('read'):
             return None
         cos = self.env.context.get(CLICK_COS)
         if cos:
             Move = Move.with_context(allowed_company_ids=list(cos))
-        return calc.unpaid_now(Move.search_read([('id', 'in', ids)], ['move_type', 'state', 'payment_state', 'amount_residual']))
+        return calc.unpaid_now(Move.search_read([('id', 'in', ids)], ['move_type', 'state', 'payment_state', 'amount_residual_signed']))
 
     def _click_companies(self):
         """Фірми списку кліку: периметр (як у перерахунку) ∩ фірми користувача, поточна — першою (calc.click_companies)."""

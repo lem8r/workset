@@ -304,10 +304,13 @@ class WorksetFinanceMonth(models.Model):
 
     def _unpaid(self, first, last, cos, p, ic, out_partners):
         """7: неоплачені рахунки клієнтів місяця з часткою рекрутингу → ({'customer'|'energy': {партнер: [центи, ids]}}); міжфірмові й партнери
-        фірм поза периметром (не з Energy) не показуємо."""
+        фірм поза периметром (не з Energy) не показуємо. Круг 3в: залишок — у валюті фірми (amount_residual_signed: EUR за курсом проводки,
+        повернення вже мінусом), не у валюті документа (amount_residual: рахунок у гривнях дав би гривні як євро); «є залишок» — за модулем
+        того самого числа (як calc.unpaid_now і колонка списку кліку)."""
         Move = self.env['account.move']
         inv = Move.search([('move_type', 'in', list(calc.OUT_TYPES)), ('state', '=', 'posted'), ('company_id', 'in', cos),
-                           ('invoice_date', '>=', first), ('invoice_date', '<=', last), ('amount_residual', '>', calc.UNPAID_MIN),
+                           ('invoice_date', '>=', first), ('invoice_date', '<=', last),
+                           '|', ('amount_residual_signed', '>', calc.UNPAID_MIN), ('amount_residual_signed', '<', -calc.UNPAID_MIN),
                            ('payment_state', 'not in', list(calc.UNPAID_SKIP))])
         lines = self.env['account.move.line'].search([('move_id', 'in', inv.ids), ('display_type', '=', 'product'),
                                                       ('company_id', 'in', cos)]).filtered('analytic_distribution')
@@ -325,7 +328,7 @@ class WorksetFinanceMonth(models.Model):
             if bucket not in out:
                 continue
             row = out[bucket].setdefault(partner, [0, []])
-            row[0] += calc.cents((-1 if m.move_type == 'out_refund' else 1) * m.amount_residual)
+            row[0] += calc.cents(m.amount_residual_signed)
             row[1].append(m.id)
         return out
 

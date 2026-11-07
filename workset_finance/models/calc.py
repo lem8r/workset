@@ -24,7 +24,7 @@ STAGE2_MULT = 9            # переказ партнеру нетто = ряд
 STAGE2_BRUTTO = 10         # брутто переказу партнеру = рядок аналітики «II етапу» × 10 (показуємо в рядку «за грошима»)
 BILLS_LOOKBACK_MONTHS = 6  # «є рахунки постачальника» — з 1 липня минулого року (як BILLS_LOOKBACK_MONTHS сторожа tools/lib/odoo_pnl_guard.js)
 TRUTH_PCT = 1.0            # поріг «місяць правдивий» (рішення власника 14.10.2026: 1 %), як MC.truthShare
-UNPAID_MIN = 0.005         # залишок рахунку менший за це — вважається оплаченим
+UNPAID_MIN = 0.005         # залишок рахунку (за модулем, у валюті фірми — amount_residual_signed) не більший за це — вважається оплаченим
 MAX_ID = 2147483647        # найбільший id запису (integer PostgreSQL): лінія пари більша — пропуск (інакше browse упаде на SQL)
 # Пробільні символи країв фрази — ОДИН набір із PHRASE_WS у tools/lib/odoo_finance_ladder.js: str.strip() Python і String.prototype.trim() JS
 # ріжуть різне (strip — ще \x1c–\x1f і \x85, trim — ще BOM U+FEFF), тому обидві сторони беруть об'єднання (круг 1д). Пробіл нульової ширини
@@ -1415,15 +1415,17 @@ def asof_text(days, lang=0):
 def unpaid_now(rows):
     """«Не оплачено» на сьогодні (круг 3б, ревю 3: збережений залишок — на день перерахунку свого місяця, а клік показує поточні рахунки;
     рахунок березня, оплачений у серпні, при вже не перераховуваному березні давав число ≠ списку): rows — рахунки, які перерахунок відніс
-    до кошика, прочитані зараз [{'id', 'move_type', 'state', 'payment_state', 'amount_residual'}] → {'cents': залишок зараз, 'ids': рахунки,
-    що лишаються неоплаченими (список кліку = число)}. Правила — як _unpaid перерахунку: лише out_invoice / out_refund, проведені, не
-    оплачені й не сторновані (UNPAID_SKIP), залишок більший за UNPAID_MIN; повернення — мінусом; центи — по рахунку, потім сума."""
+    до кошика, прочитані зараз [{'id', 'move_type', 'state', 'payment_state', 'amount_residual_signed'}] → {'cents': залишок зараз, 'ids':
+    рахунки, що лишаються неоплаченими (список кліку = число)}. Правила — як _unpaid перерахунку: лише out_invoice / out_refund, проведені, не
+    оплачені й не сторновані (UNPAID_SKIP), |залишок| більший за UNPAID_MIN; центи — по рахунку, потім сума. Круг 3в: залишок — у валюті
+    фірми (amount_residual_signed, EUR за курсом проводки; повернення в ньому вже мінусом), а не у валюті документа (amount_residual:
+    рахунок у гривнях дав би гривні як євро)."""
     total, ids = 0, []
     for r in rows or []:
-        residual = float(r.get('amount_residual') or 0)
+        residual = float(r.get('amount_residual_signed') or 0)
         if (r.get('move_type') not in OUT_TYPES or r.get('state') != 'posted' or r.get('payment_state') in UNPAID_SKIP
-                or residual <= UNPAID_MIN):
+                or abs(residual) <= UNPAID_MIN):
             continue
-        total += cents((-1 if r.get('move_type') == 'out_refund' else 1) * residual)
+        total += cents(residual)
         ids.append(r['id'])
     return {'cents': total, 'ids': sorted(ids)}

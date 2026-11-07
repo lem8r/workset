@@ -624,9 +624,20 @@ msgstr "Пересчитать"
 #: model_terms:ir.ui.view,arch_db:workset_finance.view_month_list
 #: model_terms:ir.ui.view,arch_db:workset_finance.view_item_list
 #: model_terms:ir.ui.view,arch_db:workset_finance.view_adjust_list
+#: model_terms:ir.ui.view,arch_db:workset_finance.view_click_move_list
 #: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
 msgid "Разом"
 msgstr "Итого"
+
+#. module: workset_finance
+#: model_terms:ir.ui.view,arch_db:workset_finance.view_month_list
+msgid "7 Не оплачено замовниками, на день перерахунку"
+msgstr "7 Не оплачено заказчиками, на день пересчёта"
+
+#. module: workset_finance
+#: model_terms:ir.ui.view,arch_db:workset_finance.view_month_list
+msgid "7 Не оплачено Energy, на день перерахунку"
+msgstr "7 Не оплачено Energy, на день пересчёта"
 
 #. module: workset_finance
 #: model_terms:ir.ui.view,arch_db:workset_finance.view_month_form
@@ -882,6 +893,12 @@ msgstr "Не оплачено заказчиками"
 #: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
 msgid "Прибутковість ліній"
 msgstr "Прибыльность линий"
+
+#. module: workset_finance
+#. odoo-javascript
+#: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
+msgid "«Прибутковість ліній» показує період до 24 міс., рік — до останнього закритого місяця"
+msgstr "«Прибыльность линий» показывает период до 24 мес., год — до последнего закрытого месяца"
 
 #. module: workset_finance
 #. odoo-javascript

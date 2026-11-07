@@ -27,8 +27,11 @@
                 <field name="s4c_cash" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
                 <field name="s5_owners" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
                 <field name="s6_stage2" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
-                <field name="s7_unpaid_customers" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
-                <field name="s7_unpaid_energy" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
+                <!-- круг 3в: тут — збережений залишок на день перерахунку місяця (екран «Власник» показує його на сьогодні) — так і підписано -->
+                <field name="s7_unpaid_customers" string="7 Не оплачено замовниками, на день перерахунку" widget="monetary"
+                       options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
+                <field name="s7_unpaid_energy" string="7 Не оплачено Energy, на день перерахунку" widget="monetary"
+                       options="{'currency_field': 'currency_id', 'no_symbol': True}" sum="Разом"/>
                 <field name="q_pct" optional="show"/>
                 <field name="s5_owners_share" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" optional="hide" sum="Разом"/>
                 <field name="revenue" widget="monetary" options="{'currency_field': 'currency_id', 'no_symbol': True}" optional="hide" sum="Разом"/>

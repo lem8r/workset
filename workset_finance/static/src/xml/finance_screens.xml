@@ -231,7 +231,8 @@
                             <!-- «Окремо від прибутку» (за період): №, II етап (клік — рядки аналітики чи рахунку), не оплачено замовниками, не
                                  оплачено групою Energy (жовта крапка; назва групи — з Odoo під час роботи, a.firm, у коді модуля її немає; залишок —
                                  на сьогодні, «на сьогодні», а без права читати рахунки — на дату перерахунку, «на ДД.ММ»; клік — рахунки);
-                                 посилання — якщо «Прибутковість ліній» установлена, за тим самим періодом -->
+                                 посилання — якщо «Прибутковість ліній» установлена, за тим самим періодом; у році й періоді — підказка про межі
+                                 М3 (круг 3в: «з–по» — до 24 міс., рік — до останнього закритого місяця), у місяці її немає -->
                             <div t-if="data.aside" class="card">
                                 <div class="card-header fw-semibold">Окремо від прибутку</div>
                                 <div class="card-body d-flex flex-column gap-2">
@@ -248,7 +249,11 @@
                                             <span class="text-nowrap d-inline-flex align-items-center gap-1"><span t-if="a.warn" class="o_workset_finance_dot rounded-circle bg-warning"/><t t-esc="euros(a.amount)"/> €</span>
                                         </div>
                                     </t>
-                                    <button t-if="data.aside.profit" type="button" class="btn btn-link p-0 mt-auto align-self-end" t-on-click="() => this.openProfit()">Прибутковість ліній <i class="fa fa-arrow-right ms-1"/></button>
+                                    <t t-if="data.aside.profit">
+                                        <button t-if="data.period.kind === 'month'" type="button" class="btn btn-link p-0 mt-auto align-self-end" t-on-click="() => this.openProfit()">Прибутковість ліній <i class="fa fa-arrow-right ms-1"/></button>
+                                        <button t-else="" type="button" class="btn btn-link p-0 mt-auto align-self-end" t-on-click="() => this.openProfit()"
+                                                title="«Прибутковість ліній» показує період до 24 міс., рік — до останнього закритого місяця">Прибутковість ліній <i class="fa fa-arrow-right ms-1"/></button>
+                                    </t>
                                 </div>
                             </div>
                         </div>

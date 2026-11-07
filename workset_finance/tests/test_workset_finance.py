@@ -19,6 +19,8 @@ workset_finance). Усі дані — вигадані в самому тест�
 import json
 import re
 
+from lxml import etree
+
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests.common import TransactionCase, new_test_user, tagged
 from odoo.tools import SQL
@@ -142,11 +144,12 @@ class TestWorksetFinance(TransactionCase):
         return move
 
     @classmethod
-    def _invoice(cls, partner, amount, day, dist, move_type='out_invoice'):
-        move = cls.env['account.move'].with_company(cls.co).create({
+    def _invoice(cls, partner, amount, day, dist, move_type='out_invoice', currency=None):
+        """Проведений рахунок (чи повернення) клієнту фірми A; currency — валюта документа (немає — валюта фірми, EUR)."""
+        move = cls.env['account.move'].with_company(cls.co).create(dict({
             'move_type': move_type, 'partner_id': partner.id, 'invoice_date': day, 'date': day, 'journal_id': cls.sale.id,
             'invoice_line_ids': [(0, 0, {'name': 'service', 'quantity': 1, 'price_unit': amount, 'account_id': cls.income.id, 'tax_ids': [(6, 0, [])],
-                                         'analytic_distribution': dist or False})]})
+                                         'analytic_distribution': dist or False})]}, **({'currency_id': currency.id} if currency else {})))
         move.action_post()
         return move
 
@@ -1044,7 +1047,7 @@ class TestWorksetFinance(TransactionCase):
         self.assertAlmostEqual(aside['stage2']['amount'], feb.s6_stage2 + mar.s6_stage2)
         self.assertAlmostEqual(self._amount_of(aside['stage2']['open']), aside['stage2']['amount'])
         self.assertEqual(self._records(aside['customers']['open']), self.inv_cust)
-        self.assertAlmostEqual(self._amount_of(aside['customers']['open'], 'amount_residual'), aside['customers']['amount'])
+        self.assertAlmostEqual(self._amount_of(aside['customers']['open'], 'amount_residual_signed'), aside['customers']['amount'])
         self.assertEqual(aside['customers']['asof'], calc.t('p_today', self.Month._lang()), 'неоплачене — на сьогодні')
 
     # ——— круг 3б: правки ревю круга 3 ———
@@ -1068,29 +1071,76 @@ class TestWorksetFinance(TransactionCase):
             self.assertAlmostEqual(cust['amount'], 70, msg='на сьогодні: 100 − 30 (збережене — 100)')
             self.assertEqual(cust['asof'], calc.t('p_today', lang))
             self.assertEqual(self._records(cust['open']), self.inv_cust)
-            self.assertAlmostEqual(self._amount_of(cust['open'], 'amount_residual'), cust['amount'], msg='число = сумі списку')
+            self.assertAlmostEqual(self._amount_of(cust['open'], 'amount_residual_signed'), cust['amount'], msg='число = сумі списку')
             self.assertEqual(cust['open']['context'].get('default_move_type'), 'out_invoice', 'список — як «Рахунки» клієнтів Odoo')
-        # без права читати рахунки — як до круга 3б: збережений залишок «на ДД.ММ» (день перерахунку), без кліку
+        # без права читати рахунки — як до круга 3б: збережений залишок «на ДД.ММ» (день перерахунку), без кліку. Права — підміною has_access
+        # (ревю 3б): на копії з модулями прода base.group_user може мати читання рахунків, тож тест не спирається на склад груп бази
         co = {'company_id': self.co.id, 'company_ids': [(6, 0, self.cos)]}
         owner = new_test_user(self.env, login='fin_owner_unpaid', groups='base.group_user,workset_finance.group_owner', **co)
-        self.assertFalse(self.env['account.move'].with_user(owner).has_access('read'), 'передумова: прав на рахунки немає')
+        Move = type(self.env['account.move'])
+        has_access = Move.has_access
+
+        def no_read(rec, operation):
+            return False if operation == 'read' and rec.env.uid == owner.id else has_access(rec, operation)
+        self.patch(Move, 'has_access', no_read)
         plain = {a['key']: a for a in self.Month.with_user(owner).finance_owner(M)['aside']['rows']}
         self.assertEqual(self._r(plain['customers']['amount'], plain['energy']['amount']), [100, 20])
         self.assertRegex(plain['customers']['asof'], r'^\S+ \d{2}\.\d{2}$')
         self.assertFalse(plain['customers']['open'])
-        # чиста функція: правила _unpaid перерахунку — повернення мінусом, оплачені, сторновані, чернетки й залишок до UNPAID_MIN — поза
-        got = calc.unpaid_now([{'id': 3, 'move_type': 'out_invoice', 'state': 'posted', 'payment_state': 'partial', 'amount_residual': 70},
-                               {'id': 1, 'move_type': 'out_refund', 'state': 'posted', 'payment_state': 'not_paid', 'amount_residual': 5},
-                               {'id': 2, 'move_type': 'out_invoice', 'state': 'posted', 'payment_state': 'paid', 'amount_residual': 0},
-                               {'id': 4, 'move_type': 'out_invoice', 'state': 'cancel', 'payment_state': 'not_paid', 'amount_residual': 9},
-                               {'id': 5, 'move_type': 'out_invoice', 'state': 'posted', 'payment_state': 'not_paid', 'amount_residual': 0.004}])
-        self.assertEqual(got, {'cents': 6500, 'ids': [1, 3]})
+        # чиста функція: правила _unpaid перерахунку — залишок у валюті фірми (повернення в ньому вже мінусом), оплачені, сторновані,
+        # чернетки й |залишок| до UNPAID_MIN — поза; залишок у валюті документа (amount_residual) не береться (круг 3в)
+        row = {'move_type': 'out_invoice', 'state': 'posted', 'payment_state': 'not_paid'}
+        got = calc.unpaid_now([dict(row, id=3, payment_state='partial', amount_residual_signed=70),
+                               dict(row, id=1, move_type='out_refund', amount_residual_signed=-5),
+                               dict(row, id=2, payment_state='paid', amount_residual_signed=0),
+                               dict(row, id=4, state='cancel', amount_residual_signed=9),
+                               dict(row, id=5, amount_residual_signed=0.004),
+                               dict(row, id=6, move_type='out_refund', amount_residual_signed=-0.004),
+                               dict(row, id=7, amount_residual=400, amount_residual_signed=10)])
+        self.assertEqual(got, {'cents': 7500, 'ids': [1, 3, 7]})
+
+    # ——— круг 3в: правки ревю круга 3б ———
+    def _uah(self, rate=40.0):
+        """Гривня з курсом rate за євро у фірмі A (з 2030-01-01): 400 UAH — 10 EUR за курсом проводки."""
+        uah = self.env.ref('base.UAH')
+        uah.active = True
+        self.env['res.currency.rate'].create({'name': '2030-01-01', 'rate': rate, 'currency_id': uah.id, 'company_id': self.co.id})
+        return uah
+
+    def test_unpaid_in_company_currency(self):
+        """«Не оплачено» — у валюті фірми (EUR за курсом проводки), а не у валюті документа (на проді є неоплачені рахунки клієнтів у гривнях;
+        перший такий із часткою рекрутингу дав би гривні як євро): рахунок 400 UAH при курсі 40 — 10 EUR, повернення 80 UAH — −2 EUR (знак — з
+        amount_residual_signed, ручного −1 немає; повернення з від'ємним залишком — теж «є залишок»). Перерахунок, екран «на сьогодні» і сума
+        колонки списку кліку — одне число; колонка у своєму виді рахунків видима й із сумою."""
+        uah = self._uah()
+        d = {str(self.a_node_a.id): 100}
+        inv = self._invoice(self.cust1, 400, '2030-03-21', d, currency=uah)
+        ref = self._invoice(self.cust1, 80, '2030-03-22', d, move_type='out_refund', currency=uah)
+        self.assertEqual(self._r(inv.amount_residual, inv.amount_residual_signed, ref.amount_residual, ref.amount_residual_signed), [400, 10, 80, -2],
+                         'передумова: у валюті документа й у валюті фірми — різні числа; повернення в amount_residual_signed — мінусом')
+        self._run()
+        self.assertAlmostEqual(self._month().s7_unpaid_customers, 108, msg='EUR: 100 + 10 − 2 (у валюті документа було б 100 + 400 − 80 = 420)')
+        item = self.env['workset.finance.item'].search([('month', '=', M), ('kind', '=', 'unpaid'), ('partner_id', '=', self.cust1.id)])
+        self.assertEqual((item.amount, item.count), (108, 3))
+        cust = {a['key']: a for a in self._owner()['aside']['rows']}['customers']
+        self.assertAlmostEqual(cust['amount'], 108, msg='на сьогодні — те саме число, у валюті фірми')
+        self.assertEqual(self._records(cust['open']), self.inv_cust | inv | ref)
+        self.assertAlmostEqual(self._amount_of(cust['open'], 'amount_residual_signed'), cust['amount'], msg='число = сумі колонки списку')
+        self.assertAlmostEqual(self._amount_of(cust['open'], 'amount_residual'), 580, msg='у валюті документа (100 + 400 + 80) — інше число')
+        # список кліку — свій вид рахунків: колонка залишку у валюті фірми видима й із сумою
+        view = self.env.ref(CLICK_VIEWS['account.move'])
+        self.assertEqual(cust['open']['views'][0], [view.id, 'list'])
+        arch = etree.fromstring(self.env['account.move'].get_views([(view.id, 'list')])['views']['list']['arch'])
+        cols = [f for f in arch.iter('field') if f.get('name') == 'amount_residual_signed' and f.get('sum')
+                and f.get('optional') != 'hide' and not f.get('column_invisible')]
+        self.assertTrue(cols, 'у списку кліку — видима колонка amount_residual_signed із сумою')
 
     def test_every_list_view_has_row_number(self):
         """Колонка «№» (правило власника 07.11: «номер: оставить … всегда можно сказать вопрос по номеру 3»): у кожного list-виду моделей
         модуля перша видима колонка — поле id з віджетом workset_finance_row_number; клік екрана, що відкриває стандартну модель (рядки
         аналітики, проводок, рахунки), — свій список від штатного (primary) з «№» за посиланням 'views'; штатний список моделі за замовчуванням
-        — не наш і без «№» (не зламано). Свої моделі — штатний (свій) список, без 'views'."""
+        — не наш і без «№» (не зламано; priority 1000, круг 3в: навіть штатний список із priority ≥ 100 лишається за замовчуванням). Свої
+        моделі — штатний (свій) список, без 'views'."""
         first = re.compile(r'<field name="(\w+)"(?![^>]*column_invisible)')
         widget = 'widget="workset_finance_row_number"'
         for model in ('workset.finance.month', 'workset.finance.item', 'workset.finance.adjust', 'workset.finance.check'):
@@ -1101,7 +1151,7 @@ class TestWorksetFinance(TransactionCase):
         for model, xid in CLICK_VIEWS.items():
             view = self.env.ref(xid)
             ids[model] = view.id
-            self.assertEqual((view.model, view.mode, view.priority), (model, 'primary', 99), xid)
+            self.assertEqual((view.model, view.mode, view.priority), (model, 'primary', 1000), xid)
             arch = self.env[model].get_views([(view.id, 'list')])['views']['list']['arch']
             self.assertIn(widget, arch, xid)
             self.assertEqual(first.search(arch).group(1), 'id', '%s: «№» — перша видима колонка' % xid)
