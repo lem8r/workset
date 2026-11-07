@@ -21,6 +21,13 @@
         'views/employee_views.xml',
         'views/menus.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            # колонка «№» у списку «Виїзди» (правило власника 07.11: номер рядка в кожній таблиці)
+            'workset_dispatch/static/src/js/row_number.js',
+            'workset_dispatch/static/src/xml/row_number.xml',
+        ],
+    },
     'installable': True,
     'auto_install': False,
     'application': False,

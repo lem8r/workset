@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <!-- колонка «№» списку «Виїзди» (static/src/js/row_number.js): сірим, вузько -->
+    <t t-name="workset_dispatch.RowNumber">
+        <span class="o_workset_dispatch_rownum text-muted" t-esc="number"/>
+    </t>
+</templates>
