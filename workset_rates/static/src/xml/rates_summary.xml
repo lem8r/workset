@@ -23,11 +23,11 @@
 
     <!-- Плитки — блоком ПЕРЕД списком у власній обгортці-стовпці (flex-direction: column): у .o_content з лівою панеллю (рядок flex) обгортка —
          один елемент поруч із панеллю, а не плитки окремою колонкою між панеллю й таблицею (копія 20, 06.11: колонка на всю висоту).
-         Сам список / дошка — штатний шаблон Odoo (t-call), без змін -->
+         Сам список — копія штатного з «№» першим стовпцем (workset_rates.NumberedListRenderer, 07.11), дошка — штатний шаблон Odoo (t-call) -->
     <t t-name="workset_rates.ListRenderer">
         <div class="o_workset_rates_stack">
             <RatesSummary model="props.list.model"/>
-            <t t-call="web.ListRenderer"/>
+            <t t-call="workset_rates.NumberedListRenderer"/>
         </div>
     </t>
 

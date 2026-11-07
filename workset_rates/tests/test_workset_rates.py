@@ -2038,6 +2038,51 @@ class TestWorksetRates(TransactionCase):
         self.assertEqual(self.R.search([('id', 'in', ids), ('gantt_stop', '!=', False)]), past | cur | fut | alone, '«встановлено» — без помилки')
         self.assertFalse(self.R.search([('id', 'in', ids), ('gantt_stop', '=', False)]))
 
+    def test_b_gantt_rows_numbered(self):
+        """«№» у «Стрічці» (правило власника 07.11): рядки останнього рівня групування (люди) — «N. Ім'я» наскрізно в порядку показу (після
+        «Без лінії» в кінець), від зсуву сторінки груп (offset — ключем або п'ятим аргументом); лінії, id, склад груп і записи — як віддав
+        web_gantt; останній рівень не many2one або його немає в групах — без номера. Відповідь web_gantt підмінена (форма — як у web_gantt
+        17–18: значення many2one — [id, назва]); що Odoo 19 віддає саме так — дивимось на копії."""
+        mro = type(self.R).__mro__
+        ours = next(i for i, c in enumerate(mro) if c.__module__.endswith('workset_rates.models.workset_rate_overview'))
+        parent = next(c for c in mro[ours + 1:] if 'get_gantt_data' in vars(c))
+        groups = [{'line_id': False, 'person_id': [7, 'Тест Б'], '__record_ids': [3]},
+                  {'line_id': [1, 'Лінія Т'], 'person_id': [5, 'Тест А'], '__record_ids': [1]},
+                  {'line_id': [1, 'Лінія Т'], 'person_id': [6, 'Тест В'], '__record_ids': [2]}]
+
+        def fake(model, *args, **kwargs):
+            return {'groups': [dict(g) for g in groups], 'length': len(groups), 'records': []}
+
+        with patch.object(parent, 'get_gantt_data', fake):
+            res = self.R.get_gantt_data(domain=[], groupby=['line_id', 'person_id'], read_specification={}, offset=0)
+            paged = self.R.get_gantt_data([], ['line_id', 'person_id'], {}, 80, 20)
+            months = self.R.get_gantt_data(domain=[], groupby=['line_id', 'date_from:month'], read_specification={})
+        self.assertEqual([g['person_id'] for g in res['groups']], [[5, '1. Тест А'], [6, '2. Тест В'], [7, '3. Тест Б']],
+                         'наскрізно в порядку показу: «Без лінії» — в кінці й з останнім номером')
+        self.assertEqual([g['line_id'] for g in res['groups']], [[1, 'Лінія Т'], [1, 'Лінія Т'], [False, calc.t('gantt_no_line', self.R._lang())]],
+                         'рядки ліній — без номера')
+        self.assertEqual([g['__record_ids'] for g in res['groups']], [[1], [2], [3]], 'склад груп не змінюється')
+        self.assertEqual([g['person_id'][1] for g in paged['groups']], ['21. Тест А', '22. Тест В', '23. Тест Б'], 'друга сторінка груп — від зсуву')
+        self.assertEqual([g['person_id'] for g in months['groups']], [[5, 'Тест А'], [6, 'Тест В'], [7, 'Тест Б']],
+                         'останній рівень — місяць (не many2one): людей не нумеруємо')
+
+    def test_b_payroll_fields_group(self):
+        """Тест hr TestPayrollFieldsAccess (повна збірка Odoo.sh 797a4fd9, 07.11: «Missing payroll group on following fields: workset_temporary,
+        workset_full_rate») — для полів модуля, бо dev-збірка з тегом модуля тестів hr не гонить: кожне поле вкладки «Payroll» форми
+        працівника — з групою адміністратора кадрів на самому полі; поле працівника — related version_id.<поле> з тією самою групою й
+        readonly (test_related_fields_on_version)."""
+        arch = etree.fromstring(self.env['hr.employee'].get_view(self.env.ref('hr.view_employee_form').id, 'form')['arch'])
+        page = arch.xpath("//page[@name='payroll_information']")
+        self.assertTrue(page, 'вкладка «Payroll» є')
+        names = {n.get('name') for n in page[0].xpath(".//field[not(ancestor::field)]")}
+        self.assertLessEqual({'workset_temporary', 'workset_full_rate'}, names)
+        for name in ('workset_temporary', 'workset_full_rate'):
+            emp, ver = self.env['hr.employee']._fields[name], self.env['hr.version']._fields[name]
+            self.assertIn('hr.group_hr_manager', (emp.groups or '').split(','), name)
+            self.assertEqual(emp.groups, ver.groups, name)
+            self.assertEqual(emp.related, 'version_id.%s' % name, name)
+            self.assertEqual(emp.readonly, ver.readonly, name)
+
     def test_m2c1b_internal_context_only_superuser(self):
         """Контекст workset_rates_internal (службові поля ланцюжка без автоматики) — лише суперкористувачу: редактор через RPC з ним
         не обходить ланцюжок і А1 — усе як без контексту (ревю рівня B)."""

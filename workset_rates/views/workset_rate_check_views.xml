@@ -6,7 +6,7 @@
         <field name="arch" type="xml">
             <!-- розбір вигляду 06.11: заголовки цілком і однією мовою — «Пунктів» (а не обрізане «Розбіжностей»), «Задачі» (а не стандартне
                  англійське «Activities»), «Розібрано» з шириною -->
-            <list string="Звірки ставок" create="0" decoration-muted="done">
+            <list string="Звірки ставок" create="0" decoration-muted="done" js_class="workset_rates_numbered">
                 <field name="date" options="{'numeric': True}" width="90px"/>
                 <field name="name"/>
                 <field name="issue_count" string="Пунктів" width="90px"/>

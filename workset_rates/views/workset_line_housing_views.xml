@@ -10,7 +10,7 @@
         <field name="name">workset.line.housing.list</field>
         <field name="model">workset.line.housing</field>
         <field name="arch" type="xml">
-            <list string="Житло ліній" editable="bottom" decoration-muted="not active" default_order="line_id, customer_id, date_from desc">
+            <list string="Житло ліній" editable="bottom" decoration-muted="not active" default_order="line_id, customer_id, date_from desc" js_class="workset_rates_numbered">
                 <field name="currency_id" column_invisible="1"/>
                 <field name="active" column_invisible="1"/>
                 <field name="line_id" options="{'no_create': True}"/>

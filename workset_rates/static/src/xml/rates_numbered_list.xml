@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <!-- «№» першим стовпцем списків «Ставок» (static/src/js/rates_numbered_list.js). Копії штатних шаблонів (t-inherit-mode="primary"):
+         web.ListRenderer і web.ListRenderer.RecordRow не змінюються — чужі списки рендеряться як були. Стовпець «№» — службовий
+         (column.type workset_rates_no): у заголовку — підпис у вже наявній порожній комірці штатного t-else (як у кнопок), у рядку — своя
+         комірка з номером; новий рядок — порожньо (номер — rowNumber, rates_row_numbers.listRowNumbers). Комірка без o_data_cell — переходи
+         клавішами її минають; рядок групи, підвал і «Додати рядок» займають її штатно (колонка — у columns) -->
+    <t t-name="workset_rates.NumberedListRenderer" t-inherit="web.ListRenderer" t-inherit-mode="primary">
+        <xpath expr="//thead//t[@t-foreach='columns']/th[@t-else='']" position="inside">
+            <span t-if="column.type === 'workset_rates_no'" class="o_workset_rates_no d-block" t-esc="column.label"/>
+        </xpath>
+    </t>
+
+    <t t-name="workset_rates.NumberedListRenderer.RecordRow" t-inherit="web.ListRenderer.RecordRow" t-inherit-mode="primary">
+        <xpath expr="//t[@t-foreach='getColumns(record)']" position="inside">
+            <td t-if="column.type === 'workset_rates_no'" class="o_workset_rates_no" t-esc="rowNumber(record)"/>
+        </xpath>
+    </t>
+</templates>

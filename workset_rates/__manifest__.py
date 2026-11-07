@@ -11,13 +11,14 @@
 «Договір → база»: нова версія договору дає нову ставку з її дати (позначка «Тимчасово (не база)» — ні), щоночі — догон і страж «вгору і назад».
 Житло ліній: як кожна лінія рахує житло людей (правило лінії або замовника з датами) — для прибутковості й розкладу оплат.
 «Огляд ставок»: плитки, картки ліній, графіки по місяцях і тривоги на одній сторінці; «Стрічка» — ставки смугами в часі.
+«№» — номер рядка першим стовпцем у списках модуля, у рядках тривог «Огляду» й у рядках «Стрічки».
 Дані (лінії, правила, бонуси, периметр фірм, редактори) пише інструмент через API — у модулі лише устрій.
 """,
     'author': 'WorkSET',
     'website': 'https://workset.com.ua',
     'license': 'LGPL-3',
     'category': 'Human Resources',
-    'version': '19.0.4.2.0',
+    'version': '19.0.4.3.0',
     # hr — картки й групи кадрів; account — група бухгалтерії й customer_rank; project — група адміністраторів проєктів і форма проєкту;
     # sale_timesheet — карта проєктів (project.sale.line.employee.map) і табелі (через hr_timesheet; hourly_cost — hr_hourly_cost).
     # hourly_wage версії договору (hr_payroll, Enterprise) читається м'яко: поля немає — «У договорі» 0.
@@ -46,6 +47,9 @@
     'assets': {
         'web.assets_backend': [
             'workset_rates/static/src/scss/workset_rates.scss',
+            'workset_rates/static/src/js/rates_row_numbers.js',
+            'workset_rates/static/src/js/rates_numbered_list.js',
+            'workset_rates/static/src/xml/rates_numbered_list.xml',
             'workset_rates/static/src/js/rates_summary.js',
             'workset_rates/static/src/xml/rates_summary.xml',
             'workset_rates/static/src/js/rates_format.js',

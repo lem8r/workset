@@ -336,7 +336,7 @@
                          Змін немає — блоку немає: додають кнопкою «Тимчасова зміна» в шапці (розбір вигляду 06.11) -->
                     <separator string="Тимчасові зміни" invisible="not id or not raise_ids"/>
                     <div class="mb-3" name="raises" invisible="not id or not raise_ids">
-                        <field name="raise_ids" readonly="1" nolabel="1">
+                        <field name="raise_ids" readonly="1" nolabel="1" widget="workset_rates_x2many">
                             <list create="0" delete="0" decoration-muted="state in ('paid', 'cancel', 'nothing', 'nohours')" decoration-warning="soon">
                                 <field name="currency_id" column_invisible="1"/>
                                 <field name="soon" column_invisible="1"/>
@@ -382,7 +382,7 @@
                         </page>
                         <page name="others" string="Інші ставки" invisible="not id or not others_note">
                             <div class="text-muted mb-2">Діючі ставки цього працівника в інших замовників і чи працює він там зараз.</div>
-                            <field name="person_rate_ids" readonly="1" nolabel="1">
+                            <field name="person_rate_ids" readonly="1" nolabel="1" widget="workset_rates_x2many">
                                 <list create="0" delete="0">
                                     <field name="currency_id" column_invisible="1"/>
                                     <field name="customer_id"/>
@@ -397,7 +397,7 @@
                         </page>
                         <page name="pair" string="Історія пари" invisible="not id">
                             <div class="text-muted mb-2">Інші ставки цієї пари «працівник × замовник» — від нової до старої.</div>
-                            <field name="pair_rate_ids" readonly="1" nolabel="1" context="{'active_test': False}">
+                            <field name="pair_rate_ids" readonly="1" nolabel="1" context="{'active_test': False}" widget="workset_rates_x2many">
                                 <list decoration-muted="state == 'past'" create="0" delete="0">
                                     <field name="currency_id" column_invisible="1"/>
                                     <field name="date_from" options="{'numeric': True}"/>

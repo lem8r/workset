@@ -211,7 +211,10 @@
                             <!-- круг вигляду 06.11: заголовок звірки — «пункти» (не «проблеми»), далі три групи: «Потрібна дія» (живі тривоги з
                                  рядками + розділи звірки про гроші й людей без ставки) і «Договір ≠ база — подробиці» — розгорнуті, «Неповні дані» —
                                  згорнута, сіра, із загальним числом. Нульового не видно. Числа звірки — «пункти» (підказка: чим вони відрізняються
-                                 від плиток і списку «Ставки з розбіжностями»); підписи розділів — мовою користувача з сервера -->
+                                 від плиток і списку «Ставки з розбіжностями»); підписи розділів — мовою користувача з сервера.
+                                 «№» (правило власника 07.11): рядки живих тривог — з номером першим стовпцем, наскрізно по панелі
+                                 (alertRowStart); заголовки груп і тривог, розділи звірки й «Показано N з M» — без номера -->
+                            <t t-set="rowStart" t-value="alertRowStart"/>
                             <div class="list-group list-group-flush">
                                 <button t-if="data.check" type="button" class="list-group-item list-group-item-action text-muted small" t-att-title="data.labels.tip_check"
                                         t-on-click="openCheck" t-esc="data.check.head"/>
@@ -236,10 +239,13 @@
                                                 <span class="badge rounded-pill text-bg-warning" t-esc="int(a.count)"/>
                                             </button>
                                             <t t-foreach="a.rows" t-as="row" t-key="row_index">
-                                                <button type="button" class="list-group-item list-group-item-action o_workset_rates_ov_row" t-att-class="row.click === false ? 'pe-none' : ''"
+                                                <button type="button" class="list-group-item list-group-item-action d-flex align-items-baseline gap-2 o_workset_rates_ov_row" t-att-class="row.click === false ? 'pe-none' : ''"
                                                         t-on-click="() => this.openRow(a, row)">
-                                                    <div t-esc="row.title"/>
-                                                    <div class="small text-muted" t-esc="row.sub"/>
+                                                    <span class="o_workset_rates_ov_no flex-shrink-0" t-esc="rowStart[a.key] + row_index + 1"/>
+                                                    <div class="min-w-0">
+                                                        <div t-esc="row.title"/>
+                                                        <div class="small text-muted" t-esc="row.sub"/>
+                                                    </div>
                                                 </button>
                                             </t>
                                             <div t-if="a.count &gt; a.rows.length" class="list-group-item small text-muted o_workset_rates_ov_row">

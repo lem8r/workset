@@ -100,13 +100,20 @@ class WorksetRateOverview(models.Model):
     def get_gantt_data(self, *args, **kwargs):
         # «Стрічка»: рядки ліній — як є, «без лінії» (група з порожнім line_id) — в кінець і з підписом «Без лінії» (не стандартне
         # «Невизначений Лінія»). Групування «лінія, працівник» — групи на пару: у кінець ідуть усі без лінії. Обгортка не змінює склад
-        # даних і мовчки лишає відповідь web_gantt як є, якщо її форма інша (групувань немає, перше поле не line_id)
+        # даних і мовчки лишає відповідь web_gantt як є, якщо її форма інша (групувань немає, перше поле не line_id).
+        # «№» (07.11): рядки останнього рівня (люди) — «N. Ім'я» наскрізно в порядку показу, N — від зсуву сторінки груп (offset; у web_gantt
+        # 17–18 — п'ятий аргумент або ключ offset); значення не many2one — без номера (calc.gantt_numbered). Лише підпис групи: id, склад і
+        # порядок груп, записи — як віддав web_gantt
         res = super().get_gantt_data(*args, **kwargs)
         groupby = kwargs.get('groupby') or (args[1] if len(args) > 1 else None)
         if isinstance(groupby, str):
             groupby = [groupby]
-        if isinstance(res, dict) and 'groups' in res and isinstance(groupby, (list, tuple)) and groupby and str(groupby[0]).split(':')[0] == 'line_id':
-            res['groups'] = calc.gantt_groups_last(res.get('groups'), 'line_id', calc.t('gantt_no_line', self._lang()))
+        if isinstance(res, dict) and 'groups' in res and isinstance(groupby, (list, tuple)) and groupby:
+            names = [str(g).split(':')[0] for g in groupby]
+            if names[0] == 'line_id':
+                res['groups'] = calc.gantt_groups_last(res.get('groups'), 'line_id', calc.t('gantt_no_line', self._lang()))
+            offset = kwargs.get('offset', args[4] if len(args) > 4 else 0)
+            res['groups'] = calc.gantt_numbered(res.get('groups'), names[-1], offset)
         return res
 
     @api.depends('name', 'customer_id', 'customer_id.name', 'wage', 'price', 'price_mode', 'fixed_month', 'state', 'share_level', 'net_level')

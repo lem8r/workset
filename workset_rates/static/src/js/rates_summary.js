@@ -4,13 +4,14 @@
  *  Перечитується (з паузою 300 мс, щоб серія подій дала один виклик):
  *  - на подію «update» моделі виду (prop model — модель списку чи дошки): її шле Odoo після кожного завантаження (зміна пошуку, фільтра,
  *    панелі, сторінки) і після збереження запису — тобто й після правки ставки в списку;
- *  - коли батьківський рендерер перемальовує полосу з новим доменом (onWillUpdateProps). */
+ *  - коли батьківський рендерер перемальовує полосу з новим доменом (onWillUpdateProps).
+ *  Список ставок — з «№» першим стовпцем (07.11): рендерер — нащадок NumberedListRenderer (rates_numbered_list.js). */
 import { registry } from "@web/core/registry";
 import { useBus, useService } from "@web/core/utils/hooks";
 import { debounce } from "@web/core/utils/timing";
 import { formatFloat } from "@web/views/fields/formatters";
 import { listView } from "@web/views/list/list_view";
-import { ListRenderer } from "@web/views/list/list_renderer";
+import { NumberedListRenderer } from "@workset_rates/js/rates_numbered_list";
 import { kanbanView } from "@web/views/kanban/kanban_view";
 import { KanbanRenderer } from "@web/views/kanban/kanban_renderer";
 import { Component, onWillStart, onWillUpdateProps, useState } from "@odoo/owl";
@@ -50,9 +51,9 @@ export class RatesSummary extends Component {
     }
 }
 
-export class RatesListRenderer extends ListRenderer {
+export class RatesListRenderer extends NumberedListRenderer {
     static template = "workset_rates.ListRenderer";
-    static components = { ...ListRenderer.components, RatesSummary };
+    static components = { ...NumberedListRenderer.components, RatesSummary };
 }
 
 export class RatesKanbanRenderer extends KanbanRenderer {
