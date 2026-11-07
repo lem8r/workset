@@ -16,6 +16,7 @@ msgid "Фінанси: поправка"
 msgstr "Финансы: поправка"
 
 #. module: workset_finance
+#. odoo-javascript
 #: model:ir.model.fields,field_description:workset_finance.field_workset_finance_adjust__month
 #: model:ir.model.fields,field_description:workset_finance.field_workset_finance_check__month
 #: model:ir.model.fields,field_description:workset_finance.field_workset_finance_item__month
@@ -23,6 +24,7 @@ msgstr "Финансы: поправка"
 #: model_terms:ir.ui.view,arch_db:workset_finance.view_month_search
 #: model_terms:ir.ui.view,arch_db:workset_finance.view_item_search
 #: model_terms:ir.ui.view,arch_db:workset_finance.view_adjust_search
+#: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
 msgid "Місяць"
 msgstr "Месяц"
 
@@ -734,6 +736,24 @@ msgstr "неполный, по"
 #. module: workset_finance
 #. odoo-javascript
 #: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
+msgid "Рік"
+msgstr "Год"
+
+#. module: workset_finance
+#. odoo-javascript
+#: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
+msgid "Період"
+msgstr "Период"
+
+#. module: workset_finance
+#. odoo-javascript
+#: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
+msgid "від"
+msgstr "от"
+
+#. module: workset_finance
+#. odoo-javascript
+#: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
 msgid "Не вдалося оновити — на екрані попередні дані"
 msgstr "Не удалось обновить — на экране прежние данные"
 
@@ -782,6 +802,12 @@ msgstr "Месяц не закрыт"
 #. module: workset_finance
 #. odoo-javascript
 #: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
+msgid "Не закрито місяців"
+msgstr "Не закрыто месяцев"
+
+#. module: workset_finance
+#. odoo-javascript
+#: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
 msgid "Звірка зійшлася"
 msgstr "Сверка сошлась"
 
@@ -818,8 +844,8 @@ msgstr "доля"
 #. module: workset_finance
 #. odoo-javascript
 #: code:addons/workset_finance/static/src/xml/finance_screens.xml:0
-msgid "€ · витрати компанії"
-msgstr "€ · расходы компании"
+msgid "витрати компанії"
+msgstr "расходы компании"
 
 #. module: workset_finance
 #. odoo-javascript

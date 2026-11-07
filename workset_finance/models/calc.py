@@ -155,6 +155,14 @@ TX = {
     'q_ic': ['Міжфірмові', 'Межфирменные'],
     'q_unplaced': ['Без місця', 'Без места'],
     'h_quality': ['Не розібрано %s € із %s € обороту, поріг %s %% — клік: три кошики', 'Не разобрано %s € из %s € оборота, порог %s %% — клик: три корзины'],
+    # круг 3: період екрана (місяць / рік / свій період) — відмови, підписи (p_), заголовки списків кліку
+    'period_bad': ['Період не розібрано: %s (потрібно «РРРР-ММ»).', 'Период не разобран: %s (нужно «ГГГГ-ММ»).'],
+    'period_order': ['Період: «від» %s пізніше за «до» %s.', 'Период: «от» %s позже, чем «до» %s.'],
+    'period_many': ['Період — %d міс., а можна не більше %d.', 'Период — %d мес., а можно не больше %d.'],
+    'p_year': ['%s рік', '%s год'],
+    'p_months': ['за %d міс.', 'за %d мес.'],
+    'p_asof': ['на %s', 'на %s'],
+    'o_open_months': ['Не закриті місяці', 'Незакрытые месяцы'],
 }
 
 
@@ -1003,13 +1011,15 @@ def owner_tiles(rows, first):
             for k in TILES]
 
 
-def ladder_table(rows, first, lang=0, partial=None):
+def ladder_table(rows, first, lang=0, partial=None, period=None):
     """Таблиця «Драбина <рік>, тис. €»: rows — записи місяців (поля ступенів, *_src, 'month'); колонки — лише пораховані місяці року first
     від січня ДО first включно (круг 2б: місяці після обраного не показуються — «Разом» = «з початку року» плиток), «Разом» — Σ колонок до
-    цента. partial — {місяць: «ДД.ММ»} неповних місяців (partial_day). → {'months': [month_info], 'selected': номер колонки first (немає —
-    −1), 'rows': [{'key', 'num', 'label', 'style', 'cells': [{'month', 'value', 'text', 'src'}], 'total': {'value', 'text', 'src'}}]}; src
-    нуля — '' (пояснювати нічого), src «Разом» — src_max клітинок; значення частки (3) — мінусом."""
-    rs = ytd_rows(rows, first)
+    цента. period (parse_period, круг 3) — рік чи свій період: колонки — пораховані місяці періоду (period_rows), «Разом» = плиткам періоду,
+    обраного місяця немає (−1); місяць — як без нього. partial — {місяць: «ДД.ММ»} неповних місяців (partial_day). → {'months': [month_info +
+    'label' (шапка колонки й вісь графіка: «Вер»; колонки кількох років — «Вер 26», col_labels)], 'selected': номер колонки first (немає — −1),
+    'rows': [{'key', 'num', 'label', 'style', 'cells': [{'month', 'value', 'text', 'src'}], 'total': {'value', 'text', 'src'}}]}; src нуля — ''
+    (пояснювати нічого), src «Разом» — src_max клітинок; значення частки (3) — мінусом."""
+    rs = period_rows(rows, period) if period else ytd_rows(rows, first)
     months = [iso(r['month']) for r in rs]
     out = []
     for key, num, style, sign in LADDER_ROWS:
@@ -1020,15 +1030,17 @@ def ladder_table(rows, first, lang=0, partial=None):
             cells.append({'month': iso(r['month']), 'value': eur(c), 'text': k_text(eur(c)), 'src': (r.get(key + '_src') or 'fact') if c else ''})
         total = {'value': eur(tot), 'text': k_text(eur(tot)), 'src': src_max(c['src'] for c in cells) if tot else ''}
         out.append({'key': key, 'num': num, 'label': t('r_' + key, lang), 'style': style, 'cells': cells, 'total': total})
-    return {'months': [month_info(m, lang, (partial or {}).get(m, '')) for m in months],
-            'selected': months.index(iso(first)) if iso(first) in months else -1, 'rows': out}
+    one = not period or period.get('kind') == 'month'
+    labels = col_labels(months, lang)
+    return {'months': [dict(month_info(m, lang, (partial or {}).get(m, '')), label=labels[i]) for i, m in enumerate(months)],
+            'selected': months.index(iso(first)) if one and iso(first) in months else -1, 'rows': out}
 
 
 def chart_series(table, lang=0):
     """Ряд «Чистий прибуток <рік>, тис. €» з таблиці ladder_table (ті самі колонки): стовпці — ступінь 4, лінія — «до часток»; тисячі з одним
     знаком, підпис — текст клітинки таблиці → {'months', 'labels', 'net', 'net_text', 'base', 'base_text', 'selected', 'net_label', 'base_label'}."""
     by = {r['key']: r['cells'] for r in table['rows']}
-    return {'months': [m['value'] for m in table['months']], 'labels': [m['short'] for m in table['months']],
+    return {'months': [m['value'] for m in table['months']], 'labels': [m.get('label') or m['short'] for m in table['months']],
             'net': [k_value(c['value']) for c in by['s4_net']], 'net_text': [c['text'] for c in by['s4_net']],
             'base': [k_value(c['value']) for c in by['base']], 'base_text': [c['text'] for c in by['base']],
             'selected': table['selected'], 'net_label': t('l_net', lang), 'base_label': t('l_base', lang)}
@@ -1145,18 +1157,22 @@ def transfer_rows(items, limit=TRANSFER_ROWS):
 def owner_groups(items, key_of):
     """«Власники · місяць»: items — рядки деталі видів owner / owner_share [{'id', 'kind', 'analytic', 'name', 'amount'}], key_of — {стаття:
     [ключ, код]} (ключ власника й підпис; статті немає — рядок сам собі ключ, код — його назва). Рядок на власника: усього, «частка»
-    (owner_share) і «витрати компанії» (owner) окремо, ids рядків деталі; нульові рядки деталі пропущено; від більшого за модулем; pct —
-    довжина смуги від найбільшого → [{'code', 'total', 'share', 'company', 'ids', 'pct'}]."""
+    (owner_share) і «витрати компанії» (owner) окремо, ids рядків деталі (і окремо share_ids / company_ids — клік по числу «частка» й
+    «витрати компанії», круг 3); нульові рядки деталі пропущено; від більшого за модулем; pct — довжина смуги від найбільшого → [{'code',
+    'total', 'share', 'company', 'ids', 'share_ids', 'company_ids', 'pct'}]. Кілька місяців (період) — рядки однієї статті всіх місяців в одній
+    групі."""
     by = {}
     for it in items or []:
         c = cents(it.get('amount'))
         if not c:
             continue
         k, code = _at(key_of or {}, it.get('analytic')) or ('i%s' % it['id'], it.get('name') or '—')
-        g = by.setdefault(k, {'code': code, 'total': 0, 'share': 0, 'company': 0, 'ids': []})
+        g = by.setdefault(k, {'code': code, 'total': 0, 'share': 0, 'company': 0, 'ids': [], 'share_ids': [], 'company_ids': []})
+        part = 'share' if it.get('kind') == 'owner_share' else 'company'
         g['total'] += c
-        g['share' if it.get('kind') == 'owner_share' else 'company'] += c
+        g[part] += c
         g['ids'].append(it['id'])
+        g[part + '_ids'].append(it['id'])
     rows = sorted(by.values(), key=lambda g: (-abs(g['total']), g['code']))
     top = max([abs(g['total']) for g in rows] or [0])
     return [dict(g, total=eur(g['total']), share=eur(g['share']), company=eur(g['company']), pct=round(abs(g['total']) * 100.0 / top, 1) if top else 0.0)
@@ -1177,3 +1193,214 @@ def ids_union(domains):
             return None
         out.update(int(x) for x in dom[0][2])
     return sorted(out)
+
+
+# ——— круг 3: період екрана «Власник» (слово власника 07.11: «периоды должны быть, например хочу собственный период или полностью за год
+# 2026, 2027 и т.д., не только за месяц»): місяць (як було), рік, свій період від місяця до місяця; драбина рахується по місяцях — день не
+# обираємо ———
+PERIOD_KINDS = ('month', 'year', 'range')
+_YM_RE = re.compile(r'^([0-9]{4})-(0[1-9]|1[0-2])(?:-[0-9]{2})?$')
+_YEAR_RE = re.compile(r'^([0-9]{4})(?:-(?:0[1-9]|1[0-2])(?:-[0-9]{2})?)?$')
+
+
+def ym_first(s):
+    """«РРРР-ММ» чи «РРРР-ММ-ДД» (і дата) → перше число «РРРР-ММ-01»; інше — ''."""
+    if isinstance(s, (datetime.date, datetime.datetime)):
+        s = iso(s)
+    m = _YM_RE.match(str(s if s is not None else '').strip())
+    return '%s-%s-01' % (m.group(1), m.group(2)) if m else ''
+
+
+def month_count(a, b):
+    """Скільки місяців від a до b включно (перші числа; b раніше за a — нуль чи менше)."""
+    a, b = iso(a), iso(b)
+    return (int(b[0:4]) - int(a[0:4])) * 12 + int(b[5:7]) - int(a[5:7]) + 1
+
+
+def parse_period(period, default=''):
+    """Період екрана (круг 3): period — {'kind': 'month' | 'year' | 'range', 'from': 'РРРР-ММ', 'to': 'РРРР-ММ'} (місяць — лише 'from'; рік —
+    'from' «РРРР» чи «РРРР-ММ», 'to' не потрібне; 'from' немає — default), рядок чи дата місяця (старий виклик finance_owner(month) — місяць)
+    або порожнє — місяць default (calc.default_month). → {'kind', 'from', 'to' (перші числа), 'months': [місяці від from до to]} або
+    {'refuse': ключ TX, 'args': [...]}: не розібрати (вид, формат) — period_bad; раніше за січень 2026 — month_range; «від» пізніше за «до» —
+    period_order; більше MAX_MONTHS місяців — period_many. Рік — 12 місяців (пораховані покаже екран), свій період — від і до включно."""
+    def bad():
+        return {'refuse': 'period_bad', 'args': [str(period)[0:60]]}
+    if not period:
+        kind, a, b = 'month', default, default
+    elif isinstance(period, dict):
+        kind = period.get('kind') or 'month'
+        a = period.get('from') or default
+        b = period.get('to') or a
+        if kind == 'month':
+            b = a
+        elif kind == 'year':
+            y = _YEAR_RE.match(str(a).strip())
+            if not y:
+                return bad()
+            a, b = y.group(1) + '-01', y.group(1) + '-12'
+    elif isinstance(period, (str, datetime.date)):
+        kind, a, b = 'month', period, period
+    else:
+        return bad()
+    fa, fb = ym_first(a), ym_first(b)
+    if kind not in PERIOD_KINDS or not fa or not fb:
+        return bad()
+    for m in (fa, fb):
+        if m < MIN_MONTH:
+            return {'refuse': 'month_range', 'args': [m]}
+    if fa > fb:
+        return {'refuse': 'period_order', 'args': [fa[0:7], fb[0:7]]}
+    n = month_count(fa, fb)
+    if n > MAX_MONTHS:
+        return {'refuse': 'period_many', 'args': [n, MAX_MONTHS]}
+    return {'kind': kind, 'from': fa, 'to': fb, 'months': month_list(fa, fb)}
+
+
+def period_rows(rows, period):
+    """Записи місяців колонок і сум періоду: місяць — січень … він сам (ytd_rows, круг 2б); рік і свій період — місяці від 'from' до 'to'
+    включно (не раніше MIN_MONTH); за місяцем."""
+    if period.get('kind') == 'month':
+        return ytd_rows(rows, period['from'])
+    a, b = iso(period['from']), iso(period['to'])
+    return sorted([r for r in rows if a <= iso(r['month']) <= b and iso(r['month']) >= MIN_MONTH], key=lambda r: iso(r['month']))
+
+
+def col_labels(months, lang=0):
+    """Підписи колонок таблиці й осі графіка: місяці одного року — «Вер»; кількох років — «Вер 26» (рік двома цифрами)."""
+    many = len({iso(m)[0:4] for m in months}) > 1
+    return [MONTHS_SHORT[lang][int(iso(m)[5:7]) - 1] + (' ' + iso(m)[2:4] if many else '') for m in months]
+
+
+def span_text(a, b, lang=0):
+    """Проміжок місяців усередині фрази: один місяць — «вересень 2026»; один рік — «березень – вересень 2026»; різні роки — «грудень 2026 –
+    лютий 2027» (заголовки списків «Разом» і період)."""
+    a, b = iso(a), iso(b)
+    if a == b:
+        return month_label(a, lang)
+    if a[0:4] == b[0:4]:
+        return '%s – %s' % (month_label(a, lang).split(' ')[0], month_label(b, lang))
+    return '%s – %s' % (month_label(a, lang), month_label(b, lang))
+
+
+def period_info(period, lang=0, partial=''):
+    """Підписи періоду (parse_period) для екрана → {'kind', 'from', 'to' («РРРР-ММ» — стан екрана й перемикача), 'year' (рік 'from'), 'title'
+    (кнопка: «Вересень 2026», «2026 рік», «Березень – вересень 2026», «Грудень 2026 – лютий 2027»), 'title_in' (усередині фрази й у «немає
+    даних за …»), 'name' (заголовки карток «Як складається прибуток · …»: місяць — «вересень», рік і період — title_in), 'span' (заголовки
+    таблиці й графіка: місяць і рік — «2026», період — title_in), 'from_title', 'to_title' (кнопки «від» / «до»), 'n' (місяців у періоді),
+    'partial' («ДД.ММ» неповного місяця — по який день; повний — '')}."""
+    kind, a, b = period['kind'], iso(period['from']), iso(period['to'])
+    y = a[0:4]
+    if kind == 'month':
+        mi = month_info(a, lang)
+        title_in, name, span = mi['title_in'], mi['name'], y
+    elif kind == 'year':
+        title_in = t('p_year', lang) % y
+        name, span = title_in, y
+    else:
+        title_in = span_text(a, b, lang)
+        name = span = title_in
+    return {'kind': kind, 'from': a[0:7], 'to': b[0:7], 'year': y, 'title': title_in[0:1].upper() + title_in[1:], 'title_in': title_in, 'name': name,
+            'span': span, 'from_title': month_info(a, lang)['title'], 'to_title': month_info(b, lang)['title'], 'n': month_count(a, b),
+            'partial': partial or ''}
+
+
+def year_choices(rows):
+    """Вибір року: роки записів місяців (не раніше MIN_MONTH), від останнього → [{'value': «РРРР», 'title'}]."""
+    ys = sorted({iso(m)[0:4] for m, _s in rows if iso(m) >= MIN_MONTH}, reverse=True)
+    return [{'value': y, 'title': y} for y in ys]
+
+
+def period_note(n, lang=0):
+    """Підпис під числом плитки року й свого періоду: «за 9 міс.» — скільки місяців пораховано (з них сума)."""
+    return t('p_months', lang) % int(n or 0)
+
+
+def period_sum(rows):
+    """Місяці періоду одним «місяцем» (круг 3: водоспад, «Окремо від прибутку», чип «Якість даних»): rows — записи місяців → {поле MONEY: Σ
+    до цента (євро), <ступінь>_src: найсильніша позначка місяців (src_max; усі з Odoo — 'fact'), 'months': скільки місяців}. Один місяць — його
+    ж числа й позначки (Σ одного — він сам). Частка «якості даних» за період — quality_chip від цих сум: Σ кошиків і Σ обороту, як MC.truthShare
+    по сумах (міжфірмові пари й «без місця» зі знаком гасять одне одного й між місяцями — правило закриття місяця)."""
+    out = {k: eur(sum(cents(r.get(k)) for r in rows or [])) for k in MONEY}
+    for k in STEPS:
+        out[k + '_src'] = src_max(r.get(k + '_src') for r in rows or []) or 'fact'
+    out['months'] = len(rows or [])
+    return out
+
+
+def period_tiles(rows, period):
+    """Плитки за період (круг 3): місяць — owner_tiles (число місяця й «з початку року» — Σ січень … він сам; rows — записи цих місяців);
+    рік і свій період — число = Σ порахованих місяців періоду (period_rows), «з початку року» немає (None), 'n' — скільки місяців пораховано
+    (підпис «за N міс.», period_note); позначка — tile_src місяців періоду. → [{'key', 'value' (записів немає — None), 'ytd', 'src', 'n'}] у
+    порядку TILES."""
+    if period.get('kind') == 'month':
+        return [dict(x, n=None) for x in owner_tiles(rows, period['from'])]
+    rs = period_rows(rows, period)
+    return [{'key': k, 'value': eur(sum(tile_cents(r, k) for r in rs)) if rs else None, 'ytd': None, 'src': tile_src(rs, k), 'n': len(rs)}
+            for k in TILES]
+
+
+def _key_value(v):
+    """Поле ключа групи: many2one з search_read ([id, назва]) → id; порожнє — 0."""
+    if isinstance(v, (list, tuple)):
+        return v[0] if v else 0
+    return v or 0
+
+
+def merge_items(items, keys):
+    """Рядки деталі кількох місяців → по рядку на ключ (круг 3: «Перекази», кошики «якості даних» за період): keys — імена полів ключа
+    (many2one — [id, назва] → id; порожнє — 0). 'amount' — Σ до цента, 'count' — Σ, 'ids' — рядки деталі групи, 'domains' — їхні домени
+    (merge_domain), 'res_model' — спільна модель (різні — ''); решта полів (id, name, note, domain) — першого рядка. Порядок — за першою
+    появою. Один місяць — ті самі рядки (по одному в групі)."""
+    by, order = {}, []
+    for it in items or []:
+        k = tuple(_key_value(it.get(f)) for f in keys)
+        g = by.get(k)
+        if g is None:
+            g = by[k] = dict(it, ids=[], domains=[], count=0, _cents=0)
+            order.append(k)
+        elif (g.get('res_model') or '') != (it.get('res_model') or ''):
+            g['res_model'] = ''
+        g['_cents'] += cents(it.get('amount'))
+        g['count'] += int(it.get('count') or 0)
+        g['ids'].append(it['id'])
+        g['domains'].append(it.get('domain') or '')
+    out = []
+    for k in order:
+        g = by[k]
+        g['amount'] = eur(g.pop('_cents'))
+        out.append(g)
+    return out
+
+
+def merge_domain(domains):
+    """Домени кількох рядків деталі (JSON-текст або список) → один домен їхніх записів (круг 3: рядок і підсумок за період — записи всіх
+    місяців одним списком, сума списку = число): усі виду [('id', 'in', [...])] — один список id (ids_union); інакше — «АБО» доменів
+    (or_domains); доменів немає, не JSON, не список чи порожній домен серед них — None (клік тоді — самі рядки деталі)."""
+    if not domains:
+        return None
+    ids = ids_union(domains)
+    if ids is not None:
+        return [['id', 'in', ids]]
+    parsed = []
+    for d in domains:
+        try:
+            dom = json.loads(d) if isinstance(d, str) else d
+        except ValueError:
+            return None
+        if not isinstance(dom, list):
+            return None
+        parsed.append(dom)
+    return or_domains(parsed)
+
+
+def asof_text(days, lang=0):
+    """Станом на коли число-залишок («не оплачено» — на момент перерахунку свого місяця): days — дні перерахунку місяців (за Києвом,
+    «РРРР-ММ-ДД») → один день — «на 07.11», різні — «на 01.04–07.11» (роки різні — «на 15.12.26–07.11.27»); днів немає — ''."""
+    ds = sorted({iso(d) for d in days or [] if iso(d)})
+    if not ds:
+        return ''
+    many = ds[0][0:4] != ds[-1][0:4]
+
+    def day(d):
+        return d[8:10] + '.' + d[5:7] + ('.' + d[2:4] if many else '')
+    return t('p_asof', lang) % (day(ds[0]) if len(ds) == 1 else '%s–%s' % (day(ds[0]), day(ds[-1])))

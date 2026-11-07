@@ -13,8 +13,9 @@
     'website': 'https://workset.com.ua',
     'license': 'LGPL-3',
     'category': 'Accounting',
-    # 19.0.1.1.0 (круг 2) — екран «Власник» (client action, ассети), меню «Власник» першим, переклад ru.po
-    'version': '19.0.1.1.0',
+    # 19.0.1.1.0 (круг 2) — екран «Власник» (client action, ассети), меню «Власник» першим, переклад ru.po; 19.0.1.2.0 (круг 3) — період
+    # екрана (місяць / рік / свій від місяця до місяця), клікабельно все, колонка «№» у списках карток
+    'version': '19.0.1.2.0',
     # workset_rates — периметр фірм (_skip_companies) і лінії (workset.line); account, analytic — проводки й аналітика; hr — розділ кадрів
     # форми користувача для привілею; mail — листування поправок; web (Chart.js екрана) — через account
     'depends': ['workset_rates', 'account', 'hr', 'analytic', 'mail'],
