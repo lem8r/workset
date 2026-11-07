@@ -79,7 +79,9 @@ class TestWorksetDispatch(TransactionCase):
         return self.Emp.with_company(company).create(vals)
 
     def _tasks(self, rec):
-        return {a.summary: a for a in rec.activity_ids}
+        # лише відкриті задачі: Odoo 19 зберігає виконані в архіві (active=False), а заявки тут читаються з active_test=False
+        # (dev-збірка c04aec25a: «Фірма для ZUS» виконана, але видна в activity_ids)
+        return {a.summary: a for a in rec.activity_ids if 'active' not in a._fields or a.active}
 
     def _as(self, user, app):
         """Заявка очима Юлі чи Олі: вибрана одна фірма — фірма заявок."""

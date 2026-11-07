@@ -345,7 +345,10 @@ class HrApplicant(models.Model):
                 picked = candidates[app.workset_pick_no - 1]
             else:
                 raise UserError(_('Схожих карток кілька — вкажіть номер картки зі списку.'))
-            app.write({'workset_same_employee_ids': [(4, picked.id)], 'workset_state': 'wait_firm', 'workset_pick_no': 0})
+            # зв'язок з карткою чужої фірми — через sudo: у Олі в перемикачі може бути одна фірма, і запис many2many на картку поза
+            # вибраними фірмами Odoo 19 відхиляє AccessError (dev-збірка Odoo.sh c04aec25a, тест 07b); картку обрав модуль зі своїх схожих
+            app.sudo().write({'workset_same_employee_ids': [(4, picked.id)]})
+            app.write({'workset_state': 'wait_firm', 'workset_pick_no': 0})
             app.message_post(body=_('Підтверджено: це та сама людина (%s)') % picked.name)
             app._workset_close_tasks_dup()
         self.filtered(lambda a: a.workset_firm_id and a.workset_state == 'wait_firm')._workset_make_employee()
