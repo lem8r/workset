@@ -1169,8 +1169,8 @@ msgstr "ZUS и общие"
 #. module: workset_profit
 #. odoo-javascript
 #: code:addons/workset_profit/static/src/xml/profit_screens.xml:0
-msgid "частка ліній за годинами; клік — що входить"
-msgstr "доля линий по часам; клик — что входит"
+msgid "частка ліній за годинами (решта — на години без лінії); клік — що входить"
+msgstr "доля линий по часам (остальное — на часы без линии); клик — что входит"
 
 #. module: workset_profit
 #. odoo-javascript

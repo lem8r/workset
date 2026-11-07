@@ -142,7 +142,7 @@
     // назва · смуга · «чисто N %»
     .o_workset_profit_split_row {
         display: grid;
-        grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) 5rem;
+        grid-template-columns: 1.5rem minmax(0, 9rem) minmax(0, 1fr) 5rem;
         align-items: center;
         gap: map-get($spacers, 2);
         width: 100%;
@@ -263,8 +263,14 @@
     }
     // круг 5в: стовпець «№» — вузький, по правому краю, цифри однієї ширини (колір — клас text-muted у шаблоні); у «Лінії × місяці» закріплений
     // разом із назвою лінії: «№» біля краю, назва — праворуч від нього
+    // круг 5г: один клас для всіх місць «№»: мінімальна ширина й вирівнювання праворуч — назви не з'їжджають з 10-го рядка
     .o_workset_profit_rownum {
+        min-width: 1.5rem;
+        text-align: right;
         font-variant-numeric: tabular-nums;
+    }
+    span.o_workset_profit_rownum {
+        display: inline-block;
     }
     .o_workset_profit_numcol {
         width: 2.5rem;
@@ -292,6 +298,10 @@
         }
         td {
             opacity: 0.85;
+        }
+        // круг 5г: закріплена клітинка «№» — непрозора (th), клас — про всяк випадок; цифри місяців не просвічують при гортанні
+        .o_workset_profit_numcol {
+            opacity: 1;
         }
         // підпис групи «Компанія, € за місяць» — сірим без прозорості (круг 3б)
         td.o_workset_profit_muted {
@@ -376,7 +386,7 @@
             font-size: 1.75rem;
         }
         .o_workset_profit_split_row {
-            grid-template-columns: minmax(0, 6rem) minmax(0, 1fr) 4.5rem;
+            grid-template-columns: 1.5rem minmax(0, 6rem) minmax(0, 1fr) 4.5rem;
         }
     }
 }
