@@ -128,8 +128,8 @@ def min_share(rules, rule_min, line_id, cust_id, day, default=0.0):
 
 def term_by_company(pairs):
     """Строк оплати контакту по фірмах (property_payment_term_id залежить від фірми): pairs — [(назва фірми, назва строку або '')].
-    → {'text' («PL: 30 днів · SK: —»; жодного строку — ''), 'any' (є хоча б в одній фірмі), 'names' (різні назви строків за порядком)}.
-    Одна фірма — без підпису фірми."""
+    → {'text' («PL: 30 днів · SK: 14 днів» — лише фірми, де строк заданий, без порожніх «—»; жодного строку — ''), 'any' (є хоча б в
+    одній фірмі), 'names' (різні назви строків за порядком)}. Усього одна фірма — без підпису фірми."""
     pairs = [(str(c or ''), str(n or '')) for c, n in pairs or []]
     names = []
     for _c, n in pairs:
@@ -137,7 +137,7 @@ def term_by_company(pairs):
             names.append(n)
     if not names:
         return {'text': '', 'any': False, 'names': []}
-    text = names[0] if len(pairs) == 1 else ' · '.join('%s: %s' % (c, n or '—') for c, n in pairs)
+    text = names[0] if len(pairs) == 1 else ' · '.join('%s: %s' % (c, n) for c, n in pairs if n)
     return {'text': text, 'any': True, 'names': names}
 
 

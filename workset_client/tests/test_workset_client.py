@@ -81,11 +81,13 @@ class TestWorksetClient(TransactionCase):
         return stack
 
     def _user(self, login, groups):
-        return new_test_user(self.env, login=login, groups=groups)
+        # користувачу — обидві фірми тесту (записи класу створено у фірмі cls.co; без неї «Access to unauthorized or invalid companies»)
+        return new_test_user(self.env, login=login, groups=groups, company_ids=[(6, 0, [self.env.ref('base.main_company').id, self.co.id])])
 
     def _as(self, rec, user):
-        # фірми контексту класу — не для користувача: лише його фірми (як у тестах «Прибутковості»)
-        return rec.with_user(user).with_context(allowed_company_ids=user.company_ids.ids)
+        # фірми контексту класу — не для користувача: лише його фірми, власна — перша (як у тестах «Прибутковості»)
+        ids = [user.company_id.id] + [i for i in user.company_ids.ids if i != user.company_id.id]
+        return rec.with_user(user).with_context(allowed_company_ids=ids)
 
     # ——— екран: рядки й описи кліку ———
     def test_screen_rows_and_opens(self):
@@ -156,7 +158,8 @@ class TestWorksetClient(TransactionCase):
         self.assertTrue(items['scan']['empty'])
         self.assertIn('K1-2030', items['contract']['value'])
         self.assertIn('15.01.2030', items['contract']['value'])
-        self.assertEqual(items['payment_term']['value'], term.display_name, 'строк оплати — стандартне поле контакту')
+        self.assertEqual(items['payment_term']['value'], '%s: %s' % (editor.company_id.name, term.display_name),
+                         'строк оплати — стандартне поле контакту; лише фірма, де він заданий (без «—» для решти)')
         self.assertEqual((items['sign']['value'], items['site_contact']['value']), ('Contact K1a', 'Contact K1b'))
         self.assertEqual(data['money']['withdraw'], 2.5)
         self.assertTrue(data['partner']['checked']['ok'])
@@ -276,11 +279,21 @@ class TestWorksetClient(TransactionCase):
         self.assertIn('k1b-scan-own.txt', tv[0].new_value_char)
 
     def test_scan_save_ignores_foreign_attachments(self):
-        editor = self._user('ws_client_scan_editor2', 'base.group_user,workset_client.group_editor')
+        # Б1. Чужий файл не стає сканом замовника ні за яких прав: ORM сам не дає звичайному редактору записати чужий файл у scan_ids
+        # (AccessError — прийнятний результат); редактор із правом правити контакти доходить до «Зберегти» — там відсікає _own_scans
         Att = self.env['ir.attachment'].sudo()
         foreign = Att.create({'name': 'k1b-foreign.txt', 'raw': b'y', 'res_model': 'res.partner', 'res_id': self.other.id})
         stranger = Att.create({'name': 'k1b-stranger.txt', 'raw': b'z', 'res_model': 'workset.client.terms', 'res_id': 0})  # створив не editor
-        self._wizard(editor, scan_ids=[(6, 0, [foreign.id, stranger.id])]).action_save()
+        plain = self._user('ws_client_scan_editor2', 'base.group_user,workset_client.group_editor')
+        with self.assertRaises(AccessError):
+            self._wizard(plain, scan_ids=[(6, 0, [foreign.id])])
+        manager = self._user('ws_client_scan_editor3', 'base.group_user,workset_client.group_editor,base.group_partner_manager')
+        try:
+            wizard = self._wizard(manager, scan_ids=[(6, 0, [foreign.id, stranger.id])])
+        except AccessError:
+            wizard = None  # ORM зупинив раніше за наш код — теж закрито
+        if wizard:
+            wizard.action_save()
         self.assertFalse(self.cust.sudo().workset_client_contract_scan_ids, 'чужі вкладення не стали сканами замовника')
         self.assertEqual((foreign.res_model, foreign.res_id), ('res.partner', self.other.id), 'чужий файл не перепривʼязано')
         self.assertEqual((stranger.res_model, stranger.res_id), ('workset.client.terms', 0))
@@ -303,7 +316,7 @@ class TestWorksetClient(TransactionCase):
         t = self.Partner._workset_client_terms(self.cust)
         self.assertTrue(t['any'])
         self.assertIn('%s: %s' % (self.co.name, term.display_name), t['text'])
-        self.assertIn('—', t['text'], 'у фірмі без строку — «—»')
+        self.assertEqual(t['text'], '%s: %s' % (self.co.name, term.display_name), 'лише фірми, де строк заданий, без порожніх «—»')
         self.assertIn(self.cust.id, self.Partner.search([('workset_client_has_term', '=', True)]).ids, '«є хоча б в одній фірмі»')
         self.assertNotIn(self.cust.id, self.Partner.search([('workset_client_has_term', '=', False)]).ids)
         self.assertIn(self.other.id, self.Partner.search([('workset_client_has_term', '=', False)]).ids)
