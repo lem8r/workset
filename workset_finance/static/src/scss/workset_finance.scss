@@ -300,11 +300,14 @@
             font-weight: 700;
         }
     }
+    // рядок «4 Чистий прибуток»: текст — колір тексту теми, акцент — тлом; $primary текстом у темній темі Odoo 19 майже не видно
+    // (копія 20, 07.11.2026: темно-фіолетовий на темному тлі)
     .o_workset_finance_row_accent {
         th,
         td {
-            color: $primary;
+            color: $body-color;
             font-weight: 700;
+            background-color: rgba($primary, 0.16);
         }
     }
     .o_workset_finance_row_muted {

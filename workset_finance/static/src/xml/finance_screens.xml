@@ -219,7 +219,7 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr t-foreach="data.ladder.rows" t-as="r" t-key="r.key" t-attf-class="o_workset_finance_row_{{r.style}}">
+                                        <tr t-foreach="ladderRows(data.ladder.rows)" t-as="r" t-key="r.key" t-attf-class="o_workset_finance_row_{{r.style}}">
                                             <th class="o_workset_finance_sticky text-nowrap"><span class="o_workset_finance_rownum" t-esc="r.num"/><t t-esc="r.label"/></th>
                                             <td t-foreach="r.cells" t-as="cell" t-key="cell.month" class="text-end text-nowrap" t-att-class="cellCls(cell, cell_index)" t-att-title="cellTitle(cell)"
                                                 t-att-role="role(cell.open)" t-att-tabindex="tab(cell.open)" t-on-click="() => this.openList(cell.open)"
