@@ -15,7 +15,7 @@
     'website': 'https://workset.com.ua',
     'license': 'LGPL-3',
     'category': 'Sales',
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.1.0',
     # workset_rates — ставки, загальні ставки, житло ліній, лінії (і через нього account: строк оплати контакту, project — проєкти
     # замовника); workset_profit — «Хто платить», картки DKV, рядки «лінія × місяць», calc; mail — історія змін своїх полів.
     # «Агенти» (workset_agents) — м'яко: модель workset.agent.deal.client є — читається, немає — «модуль агентів не встановлено»

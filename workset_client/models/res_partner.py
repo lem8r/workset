@@ -10,6 +10,8 @@ create / write): майстер «Заповнити» й «Позначити �
 
 Список «Умови клієнтів» — замовники з «Замовників» ліній або з діючими ставками (workset_client_is_customer); стовпці — нехранимі поля
 одним читанням на сторінку (_compute_workset_client_list, sudo: ставки, лінії й правила житла лежать у «Ставках» з їхніми правами)."""
+import sys
+
 from odoo import api, fields, models
 from odoo.exceptions import AccessError
 from odoo.addons.workset_profit.models import calc as pcalc
@@ -24,6 +26,7 @@ CARD_TAG = 'workset_client.card'
 OWN_FIELDS = frozenset(['workset_client_contract_no', 'workset_client_contract_date', 'workset_client_contract_scan_ids', 'workset_client_sign_id',
                         'workset_client_site_contact_id', 'workset_client_site_address', 'workset_client_withdraw_pct',
                         'workset_client_terms_note', 'workset_client_checked_date', 'workset_client_checked_by_id'])
+MERGE_FUNCS = frozenset(['_merge', '_update_values'])  # майстер об'єднання контактів: запис у основний контакт (п. 8 К1б)
 CONTACT_DOMAIN = "[('commercial_partner_id', '=', commercial_partner_id), ('id', '!=', id)]"  # контакти цього замовника
 
 
@@ -59,6 +62,12 @@ class ResPartner(models.Model):
     workset_client_has_contract = fields.Boolean(string='Договір є', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
     workset_client_contract_text = fields.Char(string='Договір', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
     workset_client_term_text = fields.Char(string='Термін оплати', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
+    # строк оплати залежить від фірми (property_payment_term_id): «є» — хоча б в одній фірмі периметра (фільтр «Без терміну оплати»)
+    # номер рядка списку — рахує віджет workset_client_rowno у браузері (порядок рядків знає лише список); поле — місце для колонки «№»
+    workset_client_no = fields.Integer(string='№', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
+    workset_client_has_term = fields.Boolean(string='Термін оплати є', compute='_compute_workset_client_list',
+                                             search='_search_workset_client_has_term', groups=GROUP_VIEWER,
+                                             help='Строк оплати заданий хоча б в одній фірмі')
     workset_client_checked_text = fields.Char(string='Перевірено коли', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
 
     # ——— права ———
@@ -69,14 +78,27 @@ class ResPartner(models.Model):
         if not self._workset_client_can_edit():
             raise AccessError(calc.t('only_editor', calc.lang_of(self.env.lang)))
 
+    def _workset_client_merging(self):
+        """Запис іде з об'єднання контактів (К1б, п. 8): майстер об'єднання сам переносить заповнені поля в основний контакт, і це не
+        правка умов клієнта. Ознака — лише те, чого клієнт RPC підробити не може: функція майстра об'єднання (_merge / _update_values
+        у файлі з «merge» в імені) у стеку викликів. Ключів контексту тут немає: контекст у call_kw задає сам клієнт. sudo з коду
+        сервера проходить і так (_workset_client_can_edit). Не впізнали — AccessError, а не мовчазний обхід групи."""
+        frame = sys._getframe(1)
+        while frame:
+            code = frame.f_code
+            if code.co_name in MERGE_FUNCS and 'merge' in code.co_filename.lower():
+                return True
+            frame = frame.f_back
+        return False
+
     @api.model_create_multi
     def create(self, vals_list):
-        if any(OWN_FIELDS.intersection(vals) for vals in vals_list):
+        if any(OWN_FIELDS.intersection(vals) for vals in vals_list) and not self._workset_client_merging():
             self._workset_client_check_edit()
         return super().create(vals_list)
 
     def write(self, vals):
-        if OWN_FIELDS.intersection(vals):
+        if OWN_FIELDS.intersection(vals) and not self._workset_client_merging():
             self._workset_client_check_edit()
         return super().write(vals)
 
@@ -111,6 +133,23 @@ class ResPartner(models.Model):
         # оператор і значення в будь-якому вигляді Odoo 19 — rcalc.bool_search «Ставок»
         return rcalc.bool_search(operator, value, self._workset_client_customer_ids())
 
+    def _workset_client_companies(self):
+        """Фірми периметра — усі фірми бази (sudo: строк оплати лежить окремо в кожній фірмі)."""
+        return self.env['res.company'].sudo().search([], order='id')
+
+    def _workset_client_terms(self, partner, companies=None):
+        """Строк оплати контакту по кожній фірмі периметра → calc.term_by_company (К1б, п. 3)."""
+        companies = self._workset_client_companies() if companies is None else companies
+        return calc.term_by_company([(co.name, partner.sudo().with_company(co).property_payment_term_id.display_name or '') for co in companies])
+
+    def _search_workset_client_has_term(self, operator, value):
+        # property_payment_term_id шукається в поточній фірмі — обходимо фірми периметра й збираємо id
+        ids = set()
+        for co in self._workset_client_companies():
+            ids.update(self.env['res.partner'].sudo().with_company(co).with_context(active_test=False)
+                       .search([('property_payment_term_id', '!=', False)]).ids)
+        return rcalc.bool_search(operator, value, sorted(ids))
+
     def _workset_client_labels(self):
         """Підписи значень вибору правил (перекладені мовою користувача) для calc.pays_rows / housing_row."""
         Housing = self.env['workset.line.housing']
@@ -138,10 +177,17 @@ class ResPartner(models.Model):
         lang = calc.lang_of(self.env.lang)
         custs = {pcalc.cust_of(p) for p in self if isinstance(p.id, int)}
         idx = self._workset_client_index(custs) if custs else {'lines': {}, 'rates': {}}
+        # замовник, якого немає в «Замовниках» жодної лінії, але є ставки: лінія його ставок (як на екрані) — колонки «Лінія» і «Житло»
+        for cid, rs in idx['rates'].items():
+            if cid not in idx['lines']:
+                known = self._workset_client_rates_line(rs)
+                if known:
+                    idx['lines'][cid] = [known]
         line_ids = [line.id for ls in idx['lines'].values() for line in ls]
         src = self._workset_client_housing_src(line_ids) if line_ids else {}
         labels = self._workset_client_labels() if line_ids else {}
         today = self._workset_client_today()
+        companies = self._workset_client_companies()
         for p in self:
             cid = pcalc.cust_of(p) if isinstance(p.id, int) else 0
             lines, rates = idx['lines'].get(cid, []), idx['rates'].get(cid, [])
@@ -154,8 +200,10 @@ class ResPartner(models.Model):
             has = bool(c.workset_client_contract_no or c.workset_client_contract_scan_ids)
             p.workset_client_has_contract = has
             p.workset_client_contract_text = calc.t('l_yes', lang) if has else calc.t('e_none', lang)
-            term = c.property_payment_term_id
-            p.workset_client_term_text = term.display_name if term else calc.t('e_unset', lang)
+            terms = self._workset_client_terms(c, companies)
+            p.workset_client_no = 0
+            p.workset_client_has_term = terms['any']
+            p.workset_client_term_text = ', '.join(terms['names']) if terms['any'] else calc.t('e_unset', lang)
             p.workset_client_checked_text = calc.checked_info(c.workset_client_checked_date, '')['date'] or calc.t('l_checked_no', lang)
 
     # ——— дії ———

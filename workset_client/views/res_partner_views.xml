@@ -31,14 +31,15 @@
             <list string="Умови клієнтів" js_class="workset_client_list" create="0" edit="0" delete="0" default_order="name">
                 <field name="workset_client_has_contract" column_invisible="1"/>
                 <field name="workset_client_checked_date" column_invisible="1"/>
-                <field name="property_payment_term_id" column_invisible="1"/>
+                <field name="workset_client_has_term" column_invisible="1"/>
+                <field name="workset_client_no" string="№" widget="workset_client_rowno" width="40px"/>
                 <field name="name" string="Замовник"/>
                 <field name="workset_client_line_text" string="Лінія"/>
                 <field name="workset_client_rate_count" string="Ставок діє"/>
                 <field name="workset_client_share_avg" string="Частка сер., € год"/>
                 <field name="workset_client_housing_text" string="Житло — хто платить"/>
                 <field name="workset_client_contract_text" string="Договір" decoration-warning="not workset_client_has_contract"/>
-                <field name="workset_client_term_text" string="Термін оплати" decoration-warning="not property_payment_term_id"/>
+                <field name="workset_client_term_text" string="Термін оплати" decoration-warning="not workset_client_has_term"/>
                 <field name="workset_client_checked_text" string="Перевірено" decoration-warning="not workset_client_checked_date"/>
             </list>
         </field>
@@ -55,7 +56,7 @@
                 <filter name="no_contract" string="Без договору"
                         domain="[('workset_client_contract_no', '=', False), ('workset_client_contract_scan_ids', '=', False)]"/>
                 <separator/>
-                <filter name="no_term" string="Без терміну оплати" domain="[('property_payment_term_id', '=', False)]"/>
+                <filter name="no_term" string="Без терміну оплати" domain="[('workset_client_has_term', '=', False)]"/>
                 <separator/>
                 <filter name="not_checked" string="Не перевірено" domain="[('workset_client_checked_date', '=', False)]"/>
             </search>

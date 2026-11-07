@@ -67,6 +67,9 @@ TX = {
     'o_scan': ['Скан договору: %s', 'Скан договора: %s'], 'o_projects': ['Проєкти: %s', 'Проекты: %s'], 'o_line': ['Лінія: %s', 'Линия: %s'],
     'o_agent': ['Агент лінії: %s', 'Агент линии: %s'],
     # список «Умови клієнтів»
+    'for_firm': ['для фірми %s', 'для фирмы %s'],
+    'more_lines': ['ще %d ліній ›', 'ещё %d линий ›'], 'ag_rates': ['посередник у ставках', 'посредник в ставках'],
+    'o_agent_rates': ['Ставки з посередником: %s', 'Ставки с посредником: %s'],
     'l_yes': ['є', 'есть'], 'l_checked_no': ['не перевірено', 'не проверено'],
 }
 
@@ -110,12 +113,37 @@ def found_info(values, lang='uk'):
                 missing=t('f_missing', lang) % (s['none'], total) if s['none'] else '')
 
 
-def min_share(rules, rule_min, line_id, cust_id, day):
+def min_share(rules, rule_min, line_id, cust_id, day, default=0.0):
     """«Мінімум частки» картки: загальна ставка пари «лінія × замовник» на day (rcalc.rule_pick: тариф замовника точніший за правило
-    лінії) і її мінімум (rule_min — {id: мінімум}). → {'rule_id', 'value'} ; правила немає або мінімум 0 — value None («не задано»)."""
+    лінії) і її мінімум (rule_min — {id: мінімум}); default — системний параметр «Ставок» (мінімум, коли в правилі 0; rcalc.min_share_of).
+    → {'rule_id', 'value', 'default'}: мінімум правила; правила немає або мінімум 0 — value None, а default — число параметра (сіре
+    «за замовчуванням N»); немає й його — обидва None (жовте «не задано»)."""
     rid = rcalc.rule_pick(rules or [], line_id, cust_id, day) if line_id else 0
     v = float(_get(rule_min, rid) or 0) if rid else 0.0
-    return {'rule_id': rid, 'value': round(v, 2) if v else None}
+    if v:
+        return {'rule_id': rid, 'value': round(v, 2), 'default': None}
+    d = rcalc.min_share_of(0.0, 0.0, default)
+    return {'rule_id': rid, 'value': None, 'default': round(d, 2) if d else None}
+
+
+def term_by_company(pairs):
+    """Строк оплати контакту по фірмах (property_payment_term_id залежить від фірми): pairs — [(назва фірми, назва строку або '')].
+    → {'text' («PL: 30 днів · SK: —»; жодного строку — ''), 'any' (є хоча б в одній фірмі), 'names' (різні назви строків за порядком)}.
+    Одна фірма — без підпису фірми."""
+    pairs = [(str(c or ''), str(n or '')) for c, n in pairs or []]
+    names = []
+    for _c, n in pairs:
+        if n and n not in names:
+            names.append(n)
+    if not names:
+        return {'text': '', 'any': False, 'names': []}
+    text = names[0] if len(pairs) == 1 else ' · '.join('%s: %s' % (c, n or '—') for c, n in pairs)
+    return {'text': text, 'any': True, 'names': names}
+
+
+def agent_rates_range(values):
+    """Посередник у ставках без модуля агентів: «Посередник» (agent_client_share) діючих ставок, лише додатні → money_range або None."""
+    return money_range([v for v in values or [] if v and float(v) > 0])
 
 
 # ——— «Хто платить» ———
@@ -247,14 +275,26 @@ def checked_info(day, who):
 
 
 # ——— «Що з цього виходить» ———
+def _span_months(kind, anchor, start, step, top, today):
+    """Місяці періоду: коли «Прибутковість» має calc.screen_span (19.0.5, круг 5б) — вона; інакше (старіша «Прибутковість») те саме
+    правило тут: від MIN_MONTH до top. top — поточний місяць для «Місяця», останній закритий для кварталу й року."""
+    span = getattr(pcalc, 'screen_span', None)
+    if span:
+        return span(kind, anchor, None, today)['months']
+    return pcalc.month_list(max(start, pcalc.MIN_MONTH), min(pcalc.add_months(start, step - 1), top))
+
+
 def period_info(kind, value, today, lang='uk'):
     """Період блоку: kind — «Місяць | Квартал | Рік» (інше — місяць); value — місяць-якір (немає чи хибний — останній закритий,
-    pcalc.screen_month: з січня 2026 до поточного). Квартал і рік — календарні, місяці — лише від pcalc.MIN_MONTH до поточного.
+    pcalc.screen_month: з січня 2026 до поточного). Квартал і рік — календарні й лише до останнього закритого місяця, як у
+    «Прибутковості» 19.0.5 (pcalc.screen_span; у старішій версії — те саме правило тут): неповний поточний місяць — лише у «Місяць».
     → {'kind', 'value' (якір), 'months', 'title', 'range' (кілька місяців — «липень 2026 — вересень 2026»), 'prev', 'next' (якір
     сусіднього періоду; поза межами — False)}."""
     kind = kind if kind in PERIODS else 'month'
     anchor = pcalc.screen_month(value, today)
     cur = max(pcalc.month_first(today), pcalc.MIN_MONTH)
+    top = cur if kind == 'month' else pcalc.last_closed(today)
+    anchor = min(anchor, top)
     year, month = int(anchor[0:4]), int(anchor[5:7])
     if kind == 'quarter':
         start, step = '%04d-%02d-01' % (year, (month - 1) // 3 * 3 + 1), 3
@@ -265,14 +305,14 @@ def period_info(kind, value, today, lang='uk'):
     else:
         start, step = anchor, 1
         title = pcalc.month_info(anchor, lang)['title']
-    months = pcalc.month_list(max(start, pcalc.MIN_MONTH), min(pcalc.add_months(start, step - 1), cur))
+    months = _span_months(kind, anchor, start, step, top, today)
     prev = pcalc.add_months(start, -step)
     nxt = pcalc.add_months(start, step)
     span = ''
     if len(months) > 1:
         span = '%s — %s' % (pcalc.month_info(months[0], lang)['title_in'], pcalc.month_info(months[-1], lang)['title_in'])
     return {'kind': kind, 'value': anchor if kind == 'month' else start, 'months': months, 'title': title, 'range': span,
-            'prev': prev if pcalc.add_months(prev, step - 1) >= pcalc.MIN_MONTH else False, 'next': nxt if nxt <= cur else False}
+            'prev': prev if pcalc.add_months(prev, step - 1) >= pcalc.MIN_MONTH else False, 'next': nxt if nxt <= top else False}
 
 
 def period_rows(rows, overhead=None, lang='uk'):
