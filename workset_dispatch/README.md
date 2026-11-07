@@ -72,10 +72,10 @@
 ## Установка и обслуживание
 1. Папку модуля — в репозиторий Odoo.sh (`node tools/odoo_sh_push.js --module workset_dispatch`, делает coordinator); сборка ветки.
 2. `node tools/odoo_dispatch.js --target copy --install --apply`, затем `--seed --apply`, `--verify`.
-3. Проход Pipedrive → Odoo — `--pull` (таймер на VPS каждые 15 минут), вхолостую — `--preview --since …`, прошлые — `--backfill --deals …`.
+3. Проход Pipedrive → Odoo — `--pull` (рутина `odoo-dispatch-pull` на VPS каждые 15 минут, `docs/hq/scheduled-tasks/odoo-dispatch-pull.md`), вхолостую — `--preview --since …`, прошлые — `--backfill --deals …`.
 
 ## Откат
-Таймер на VPS выключить (читать сделки перестанет). Созданные модулем заявки найти по `workset_pd_deal_id > 0` и архивировать (карточки
+Таймер рутины `odoo-dispatch-pull` на VPS выключить (читать сделки перестанет). Созданные модулем заявки найти по `workset_pd_deal_id > 0` и архивировать (карточки
 не удаляются: они уже живая часть учёта). Модуль можно удалить из «Додатків» — свои поля уйдут вместе с ним, стандартные заявки и
 карточки останутся.
 

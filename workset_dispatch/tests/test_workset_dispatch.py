@@ -51,7 +51,11 @@ class TestWorksetDispatch(TransactionCase):
         cls.customer = env['res.partner'].create({'name': 'Тест замовник', 'is_company': True})
         # вакансії лежать у фірмі заявок (так і на проді: 13 з 15 — у фірмі вакансій)
         cls.job = env['hr.job'].create({'name': 'Тест вакансія', 'company_id': cls.co_rec.id, CODE_FIELD: 'WS-TT-0101-01', PARTNER_FIELD: cls.customer.id})
-        cls.env = env(user=env.ref('base.user_admin'), context=dict(env.context, workset_today=TODAY, allowed_company_ids=cls.companies.ids))
+        # нові фірми створює службовий користувач — адміністратору їх треба видати, інакше allowed_company_ids дає AccessError
+        # «Access to unauthorized or invalid companies» (dev-збірка Odoo.sh cce5ca3, 07.11.2026: 5 з 5 тестів)
+        admin = env.ref('base.user_admin')
+        admin.write({'company_ids': [(4, cid) for cid in cls.companies.ids]})
+        cls.env = env(user=admin, context=dict(env.context, workset_today=TODAY, allowed_company_ids=cls.companies.ids))
         cls.App = cls.env['hr.applicant']
         cls.Emp = cls.env['hr.employee'].with_context(active_test=False)
 
