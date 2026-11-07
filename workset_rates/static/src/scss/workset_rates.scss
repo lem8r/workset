@@ -55,6 +55,16 @@
     }
 }
 
+// «№» — номер рядка (правило власника 07.11 для всіх екранів Odoo): вузький перший стовпець списків «Ставок» (заголовок і комірки,
+// rates_numbered_list.xml; у «Огляді» — свій клас .o_workset_rates_ov_no, нижче). Праворуч, приглушено (напівпрозорий $body-color — видно
+// й на темній темі), цифри однакової ширини. Лише свій клас: на чужі списки й види не діє (тести web / web_gantt Odoo.sh)
+.o_workset_rates_no {
+    color: rgba($body-color, 0.55);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
 // «Огляд ставок» (рівень B, макет C 06.11): смуга п'яти головних чисел, «пігулки» тривог, картки ліній і панелі графіків — сітки на всю
 // ширину без порожніх полів (auto-fit: стільки колонок, скільки влазить, решта розтягується). Кольори — лише класи Bootstrap і SCSS-змінні
 // Odoo, без своїх. НЕ CSS-змінні Bootstrap через var(): Odoo 19 їх на сторінці не задає (копія 20, 06.11: primary, border-color,
@@ -225,9 +235,17 @@ $o-ws-ov-chip: rgba($body-color, 0.1);   // тло сірої капсули л�
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
     }
-    // рядки живих тривог — з відступом під заголовком тривоги в групі
+    // рядки живих тривог — з відступом під заголовком тривоги в групі; номер рядка («№», 07.11) — стовпцем однакової ширини (до 3 цифр),
+    // як «№» списків: праворуч, приглушено, цифри однакової ширини
     .o_workset_rates_ov_row {
         padding-left: map-get($spacers, 5);
+
+        .o_workset_rates_ov_no {
+            min-width: 1.75rem;
+            color: rgba($body-color, 0.55);
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
     }
     .o_workset_rates_ov_group {
         cursor: pointer;

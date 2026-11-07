@@ -9,7 +9,7 @@
         <field name="name">workset.rate.rule.list</field>
         <field name="model">workset.rate.rule</field>
         <field name="arch" type="xml">
-            <list string="Загальні ставки" decoration-muted="state == 'past'" default_order="line_id, customer_id, date_from desc">
+            <list string="Загальні ставки" decoration-muted="state == 'past'" default_order="line_id, customer_id, date_from desc" js_class="workset_rates_numbered">
                 <field name="currency_id" column_invisible="1"/>
                 <field name="level" column_invisible="1"/>
                 <field name="line_id" widget="badge"/>

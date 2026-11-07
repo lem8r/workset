@@ -6,7 +6,7 @@
         <field name="name">workset.office.bonus.list</field>
         <field name="model">workset.office.bonus</field>
         <field name="arch" type="xml">
-            <list string="Бонуси офісу" editable="bottom" decoration-muted="not active">
+            <list string="Бонуси офісу" editable="bottom" decoration-muted="not active" js_class="workset_rates_numbered">
                 <field name="currency_id" column_invisible="1"/>
                 <field name="active" column_invisible="1"/>
                 <field name="has_card" column_invisible="1"/>

@@ -6,7 +6,7 @@
         <field name="name">workset.rate.raise.list</field>
         <field name="model">workset.rate.raise</field>
         <field name="arch" type="xml">
-            <list string="Тимчасові зміни" decoration-warning="soon" decoration-muted="state in ('paid', 'cancel', 'nothing', 'nohours')">
+            <list string="Тимчасові зміни" decoration-warning="soon" decoration-muted="state in ('paid', 'cancel', 'nothing', 'nohours')" js_class="workset_rates_numbered">
                 <field name="currency_id" column_invisible="1"/>
                 <field name="soon" column_invisible="1"/>
                 <field name="person_id"/>
@@ -104,7 +104,7 @@
                         </group>
                     </group>
                     <separator string="По місяцях" invisible="not month_ids"/>
-                    <field name="month_ids" nolabel="1" readonly="1" invisible="not month_ids">
+                    <field name="month_ids" nolabel="1" readonly="1" invisible="not month_ids" widget="workset_rates_x2many">
                         <list create="0" delete="0" decoration-muted="state in ('paid', 'skip')" decoration-warning="state in ('due', 'task')">
                             <field name="currency_id" column_invisible="1"/>
                             <field name="month" options="{'numeric': True}"/>

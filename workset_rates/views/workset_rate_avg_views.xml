@@ -5,7 +5,7 @@
         <field name="name">workset.rate.avg.list</field>
         <field name="model">workset.rate.avg</field>
         <field name="arch" type="xml">
-            <list string="Середні" create="0" edit="0" delete="0" default_order="work_count desc">
+            <list string="Середні" create="0" edit="0" delete="0" default_order="work_count desc" js_class="workset_rates_numbered">
                 <field name="name" string="Розріз"/>
                 <field name="work_count" string="Працюють"/>
                 <field name="avg_wage" string="Сер. зарплата працівника"/>

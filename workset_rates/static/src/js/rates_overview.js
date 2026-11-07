@@ -11,7 +11,9 @@
  *  у підказці (lineTip), клік — фільтр сторінки за лінією; «Тривоги» трьома групами (alertGroups); графік місяців — три лінії зі значенням на
  *  останній точці, «Розподіл» — число над стовпцем; кольори графіків — з обчисленого стилю сторінки (Odoo 19 не задає CSS-змінні Bootstrap).
  *  Блок Е (на показ): стрічка «Сьогодні вирішити» над усім — чипи живих чисел із сервера (data.decide; слово власника 07.11), клік — openChip;
- *  «пігулку» «Договір ≠ база» прибрано — її число в стрічці. */
+ *  «пігулку» «Договір ≠ база» прибрано — її число в стрічці.
+ *  Круг «№» (правило власника 07.11): рядки живих тривог (люди й ставки) — з номером першим стовпцем, наскрізно по панелі (alertRowStart);
+ *  плитки, картки ліній, графіки, чипи «Сьогодні вирішити», заголовки тривог і розділи звірки — без номерів (поруч — лічильник). */
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { loadBundle } from "@web/core/assets";
@@ -22,6 +24,7 @@ import { localization } from "@web/core/l10n/localization";
 import { user } from "@web/core/user";
 import { Layout } from "@web/search/layout";
 import { groupNumber, withAlpha } from "@workset_rates/js/rates_format";
+import { alertRowStarts } from "@workset_rates/js/rates_row_numbers";
 import { Dropdown } from "@web/core/dropdown/dropdown";
 import { DropdownItem } from "@web/core/dropdown/dropdown_item";
 import { CheckboxItem } from "@web/core/dropdown/checkbox_item";
@@ -222,6 +225,11 @@ export class RatesOverview extends Component {
     isOpen(group) {
         const open = this.state.open;
         return group.key in open ? open[group.key] : group.key !== "data";
+    }
+
+    /** «№» рядків живих тривог (правило власника 07.11): наскрізно по відкритих групах — {ключ тривоги: номер першого рядка − 1}. */
+    get alertRowStart() {
+        return alertRowStarts(this.alertGroups, (g) => this.isOpen(g));
     }
 
     toggleGroup(group) {

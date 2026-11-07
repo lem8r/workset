@@ -1897,6 +1897,25 @@ def gantt_groups_last(groups, field, label=''):
     return out
 
 
+def gantt_numbered(groups, field, start=0):
+    """«Стрічка», «№» (правило власника 07.11 для всіх екранів Odoo: «всегда можно сказать вопрос по номеру 3»): рядок останнього рівня
+    групування (людина при «Лінія › Працівник») — з порядковим номером перед підписом: «3. Ім'я». groups — групи gantt у порядку показу
+    (після gantt_groups_last), field — поле останнього рівня; нумерація наскрізна, start — зсув сторінки груп (offset get_gantt_data).
+    Номер ставимо лише значенню many2one [id, назва] (так його віддає gantt; рядок «Без лінії» — [False, назва] — теж); інше (дата,
+    вибір, порожнє) і групи без поля — як є, без номера й без місця в нумерації. Не список — як є."""
+    if not isinstance(groups, list):
+        return groups
+    n = start if isinstance(start, int) and not isinstance(start, bool) and start > 0 else 0
+    out = []
+    for g in groups:
+        v = g.get(field) if isinstance(g, dict) else None
+        if isinstance(v, (list, tuple)) and len(v) == 2 and isinstance(v[1], str):
+            n += 1
+            g = dict(g, **{field: [v[0], '%d. %s' % (n, v[1])]})
+        out.append(g)
+    return out
+
+
 # «Огляд»: клік по числу відкриває список ставок. Опис списку складає сервер разом із числом (rates_overview), JS лише виконує його —
 # число й список не розходяться (тест test_b_overview_clicks_match_lists рахує список з опису так, як його відкриє клієнт)
 OV_ACTIONS = {'current': 'workset_rates.action_rates_current', 'all': 'workset_rates.action_rates_all'}

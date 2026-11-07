@@ -63,11 +63,16 @@ def add_temporary_row(arch):
 class HrVersion(models.Model):
     _inherit = 'hr.version'
 
-    # groups: поле версії через _inherits стає й полем hr.employee — без groups тест hr test_employee_fields_groups падає
-    workset_temporary = fields.Boolean(string='Тимчасово (не база)', copy=False, tracking=True, groups='hr.group_hr_user',
+    # groups: поле версії через _inherits стає й полем hr.employee (related version_id.<поле>, groups — від поля версії) — без groups тест
+    # hr test_employee_fields_groups падає. Група — адміністратор кадрів, як у зарплати версії (wage, contract_wage у hr 19): обидва поля
+    # стоять у вкладці «Payroll» форми працівника, а тест hr TestPayrollFieldsAccess (test_payroll_fields_are_hidden_to_non_payroll_users_
+    # in_employee_form_view) вимагає від кожного поля цієї вкладки групу hr.group_hr_manager або hr_payroll.group_hr_payroll_user
+    # (повна збірка Odoo.sh 797a4fd9, 07.11: з hr.group_hr_user — «Missing payroll group»). Вкладку й так бачить лише hr.group_hr_manager;
+    # код модуля читає ці поля через sudo()
+    workset_temporary = fields.Boolean(string='Тимчасово (не база)', copy=False, tracking=True, groups='hr.group_hr_manager',
                                        help='Позначте, якщо підвищення тимчасове: ставка не зміниться, доплату оформіть у «Ставки → Тимчасові зміни»')
     # повна ставка зайнятості (податки вищі): фонд працівників за домовленістю — своя сума «на повну ставку»; нова версія з дати її копіює
-    workset_full_rate = fields.Boolean(string='Повна ставка', tracking=True, groups='hr.group_hr_user',
+    workset_full_rate = fields.Boolean(string='Повна ставка', tracking=True, groups='hr.group_hr_manager',
                                        help='Повна ставка зайнятості за договором. Порожньо — неповна. Від неї залежить сума фонду працівників у ставках '
                                             '(домовленість «фонд працівників» із сумою на повну ставку).')
 
