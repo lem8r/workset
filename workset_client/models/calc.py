@@ -68,7 +68,9 @@ TX = {
     'o_agent': ['Агент лінії: %s', 'Агент линии: %s'],
     # список «Умови клієнтів»
     'for_firm': ['для фірми %s', 'для фирмы %s'],
-    'more_lines': ['ще %d ліній ›', 'ещё %d линий ›'], 'ag_rates': ['посередник у ставках', 'посредник в ставках'],
+    # «ще N ліній ›» — форми за числом: 1 / 2–4 / 5+ (11–14 — як 5+)
+    'more_lines': [('ще %d лінія ›', 'ще %d лінії ›', 'ще %d ліній ›'), ('ещё %d линия ›', 'ещё %d линии ›', 'ещё %d линий ›')],
+    'ag_rates': ['посередник у ставках', 'посредник в ставках'],
     'o_agent_rates': ['Ставки з посередником: %s', 'Ставки с посредником: %s'],
     'l_yes': ['є', 'есть'], 'l_checked_no': ['не перевірено', 'не проверено'],
 }
@@ -113,16 +115,30 @@ def found_info(values, lang='uk'):
                 missing=t('f_missing', lang) % (s['none'], total) if s['none'] else '')
 
 
-def min_share(rules, rule_min, line_id, cust_id, day, default=0.0):
+def more_lines_text(n, lang='uk'):
+    """«ще 1 лінія ›» / «ще 3 лінії ›» / «ще 5 ліній ›» (російською — «ещё 1 линия / 3 линии / 5 линий»)."""
+    n = int(n)
+    forms = TX['more_lines'][1 if lang == 'ru' else 0]
+    if n % 10 == 1 and n % 100 != 11:
+        form = forms[0]
+    elif 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        form = forms[1]
+    else:
+        form = forms[2]
+    return form % n
+
+
+def min_share(rules, rule_min, line_id, cust_id, day, default=0.0, line_min=0.0):
     """«Мінімум частки» картки: загальна ставка пари «лінія × замовник» на day (rcalc.rule_pick: тариф замовника точніший за правило
-    лінії) і її мінімум (rule_min — {id: мінімум}); default — системний параметр «Ставок» (мінімум, коли в правилі 0; rcalc.min_share_of).
+    лінії) і її мінімум (rule_min — {id: мінімум}); line_min — мінімум лінії, default — системний параметр «Ставок»: коли в правилі 0,
+    ланцюжок правило → лінія → параметр (rcalc.min_share_of, як у «Ставках»).
     → {'rule_id', 'value', 'default'}: мінімум правила; правила немає або мінімум 0 — value None, а default — число параметра (сіре
     «за замовчуванням N»); немає й його — обидва None (жовте «не задано»)."""
     rid = rcalc.rule_pick(rules or [], line_id, cust_id, day) if line_id else 0
     v = float(_get(rule_min, rid) or 0) if rid else 0.0
     if v:
         return {'rule_id': rid, 'value': round(v, 2), 'default': None}
-    d = rcalc.min_share_of(0.0, 0.0, default)
+    d = rcalc.min_share_of(0.0, line_min, default)  # та сама цепочка, що в «Ставках»: правило → лінія → параметр
     return {'rule_id': rid, 'value': None, 'default': round(d, 2) if d else None}
 
 

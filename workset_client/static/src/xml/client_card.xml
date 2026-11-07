@@ -5,11 +5,6 @@
          «Прибутковості»: підпис зверху, крупне число, «€ год» дрібно сірим; колір — лише бренд (частка) і тривоги (жовте «не задано»,
          червоне — нижче нуля); решта — класи й змінні теми Bootstrap (світла й темна). Кожен елемент з описом 'open' — кнопка
          (clickCls, role, tabindex, Enter); без опису — текст -->
-    <!-- колонка «№» списку «Умови клієнтів»: номер рядка на екрані, сірим, по правому краю -->
-    <t t-name="workset_client.RowNo">
-        <span class="d-block text-end o_workset_client_muted" t-esc="no"/>
-    </t>
-
     <!-- «ще N ліній ›» — замовник має кілька ліній «Замовників»: клік відкриває вибір лінії для блоків «Хто платить» і «Що з цього виходить» -->
     <t t-name="workset_client.LinePick">
         <t t-if="data.partner.more">
@@ -195,7 +190,7 @@
                                             <li class="list-group-item py-1 small o_workset_client_muted"><span class="o_workset_client_no d-inline-block">№</span></li>
                                             <li t-foreach="pr.rows" t-as="r" t-key="r.key" class="list-group-item o_workset_client_row d-flex justify-content-between align-items-baseline gap-2"
                                                 t-att-class="(r.key === 'remain' ? 'fs-4 fw-semibold ' : '') + clickCls(r.open)" t-att-title="hint(r.open)" t-att-role="role(r.open)" t-att-tabindex="tab(r.open)" t-on-click="() => this.openList(r.open)" t-on-keydown="(ev) => this.keyOpen(ev, r.open)">
-                                                <span t-esc="r.label"/>
+                                                <span class="me-auto" t-esc="r.label"/>
                                                 <span class="text-nowrap o_workset_client_num" t-att-class="r.tone === 'neg' ? 'text-danger' : ''"><t t-esc="money(r.ph)"/><span t-if="r.ph !== null" class="o_workset_client_unit text-muted fw-normal">€ год</span></span>
                                             </li>
                                         </ul>

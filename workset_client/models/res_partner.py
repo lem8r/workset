@@ -63,8 +63,6 @@ class ResPartner(models.Model):
     workset_client_contract_text = fields.Char(string='Договір', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
     workset_client_term_text = fields.Char(string='Термін оплати', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
     # строк оплати залежить від фірми (property_payment_term_id): «є» — хоча б в одній фірмі периметра (фільтр «Без терміну оплати»)
-    # номер рядка списку — рахує віджет workset_client_rowno у браузері (порядок рядків знає лише список); поле — місце для колонки «№»
-    workset_client_no = fields.Integer(string='№', compute='_compute_workset_client_list', groups=GROUP_VIEWER)
     workset_client_has_term = fields.Boolean(string='Термін оплати є', compute='_compute_workset_client_list',
                                              search='_search_workset_client_has_term', groups=GROUP_VIEWER,
                                              help='Строк оплати заданий хоча б в одній фірмі')
@@ -93,9 +91,23 @@ class ResPartner(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        if any(OWN_FIELDS.intersection(vals) for vals in vals_list) and not self._workset_client_merging():
-            self._workset_client_check_edit()
-        return super().create(vals_list)
+        merging = None
+        if any(OWN_FIELDS.intersection(vals) for vals in vals_list):
+            merging = self._workset_client_merging()
+            if not merging:
+                self._workset_client_check_edit()
+        records = super().create(vals_list)
+        # К1в п. 1: свої поля могли прийти не через vals, а як default_<поле> з контексту RPC (create / name_create / copy) або особистий
+        # ir.default — super().create підставляє їх уже ПІСЛЯ перевірки ключів. Тому дивимося на створене: не редактор (і не sudo з коду
+        # сервера, і не злиття) із заповненими своїми полями → AccessError, транзакція RPC відкотиться
+        if not self._workset_client_can_edit():
+            if merging is None:
+                merging = self._workset_client_merging()
+            if not merging:
+                filled = records.sudo().filtered(lambda r: any(r[f] for f in OWN_FIELDS))
+                if filled:
+                    raise AccessError(calc.t('only_editor', calc.lang_of(self.env.lang)))
+        return records
 
     def write(self, vals):
         if OWN_FIELDS.intersection(vals) and not self._workset_client_merging():
@@ -134,8 +146,10 @@ class ResPartner(models.Model):
         return rcalc.bool_search(operator, value, self._workset_client_customer_ids())
 
     def _workset_client_companies(self):
-        """Фірми периметра — усі фірми бази (sudo: строк оплати лежить окремо в кожній фірмі)."""
-        return self.env['res.company'].sudo().search([], order='id')
+        """Фірми периметра рекрутингу — усі фірми бази, крім тих, що в параметрі «Ставок» workset_rates.out_of_perimeter_company_ids
+        (фірми Energy тощо: у картці й фільтрі їх немає); sudo — строк оплати лежить окремо в кожній фірмі (К1в п. 4)."""
+        out = rcalc.parse_ids(self.env['ir.config_parameter'].sudo().get_param(rcalc.P_OUT) or '')
+        return self.env['res.company'].sudo().search([('id', 'not in', out)] if out else [], order='id')
 
     def _workset_client_terms(self, partner, companies=None):
         """Строк оплати контакту по кожній фірмі периметра → calc.term_by_company (К1б, п. 3)."""
@@ -201,7 +215,6 @@ class ResPartner(models.Model):
             p.workset_client_has_contract = has
             p.workset_client_contract_text = calc.t('l_yes', lang) if has else calc.t('e_none', lang)
             terms = self._workset_client_terms(c, companies)
-            p.workset_client_no = 0
             p.workset_client_has_term = terms['any']
             p.workset_client_term_text = ', '.join(terms['names']) if terms['any'] else calc.t('e_unset', lang)
             p.workset_client_checked_text = calc.checked_info(c.workset_client_checked_date, '')['date'] or calc.t('l_checked_no', lang)

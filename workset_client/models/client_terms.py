@@ -28,7 +28,7 @@ class WorksetClientTerms(models.TransientModel):
     payment_term_id = fields.Many2one('account.payment.term', string='Термін оплати',
                                       help='Стандартне поле контакту «Умови оплати»: ним користуються рахунки')
     company_note = fields.Char(string='Фірма строку оплати', compute='_compute_company_note',
-                               help='Строк оплати контакту залежить від фірми: вікно правит строк поточної фірми')
+                               help='Строк оплати контакту залежить від фірми: вікно змінює строк поточної фірми')
     sign_id = fields.Many2one(PARTNER, string='Хто погоджує табель', domain=CONTACTS)
     site_contact_id = fields.Many2one(PARTNER, string="Контакт на об'єкті", domain=CONTACTS)
     site_address = fields.Char(string="Адреса об'єкта")
@@ -97,7 +97,9 @@ class WorksetClientTerms(models.TransientModel):
         if self.payment_term_id != partner.property_payment_term_id:
             vals['property_payment_term_id'] = self.payment_term_id.id or False
         # нові скани з цього вікна — до контакту замовника (інакше вони лишились би на тимчасовому записі майстра); прежні не чіпаємо
-        moved = self._own_scans(partner.workset_client_contract_scan_ids).filtered(lambda a: a.res_model != PARTNER or a.res_id != partner.id)
+        # (К1в п. 6: лише НОВІ власні файли вікна — прежні скани замовника, хай і привʼязані деінде, не чіпаємо)
+        old = partner.workset_client_contract_scan_ids
+        moved = (self._own_scans(old) - old).filtered(lambda a: a.res_model != PARTNER or a.res_id != partner.id)
         if moved:
             moved.write({'res_model': PARTNER, 'res_id': partner.id})
         if vals:

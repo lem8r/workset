@@ -12,7 +12,6 @@ import { _t } from "@web/core/l10n/translation";
 import { user } from "@web/core/user";
 import { formatFloat } from "@web/views/fields/formatters";
 import { Layout } from "@web/search/layout";
-import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { listView } from "@web/views/list/list_view";
 import { ListController } from "@web/views/list/list_controller";
 import { Component, onWillStart, useState } from "@odoo/owl";
@@ -294,17 +293,6 @@ export class ClientListController extends ListController {
     }
 }
 
-/** Колонка «№» списку: номер рядка на екрані (з урахуванням сторінки), не id. Лише відображення — поле на сервері порожнє. */
-export class RowNoField extends Component {
-    static template = "workset_client.RowNo";
-    static props = { ...standardFieldProps };
-
-    get no() {
-        const root = this.props.record.model.root;
-        return (root.offset || 0) + root.records.indexOf(this.props.record) + 1;
-    }
-}
-
-registry.category("fields").add("workset_client_rowno", { component: RowNoField, supportedTypes: ["integer"] });
+// Колонка «№» списку — не наш віджет, а переносний workset_profit_row_number «Прибутковості» 19.0.6 (view: <field name="id" widget=...>).
 
 registry.category("views").add("workset_client_list", { ...listView, Controller: ClientListController });

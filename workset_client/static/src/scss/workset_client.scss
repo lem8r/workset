@@ -90,6 +90,7 @@
         counter-increment: workset-client-row;
         content: counter(workset-client-row);
         display: inline-block;
+        flex: none; // у рядку-флексі (d-flex justify-content-between) «№» — лише свій куток, а не третій елемент розподілу
         min-width: 1.5rem;
         margin-right: map-get($spacers, 2);
         color: $gray-500;

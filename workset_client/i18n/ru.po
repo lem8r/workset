@@ -59,8 +59,8 @@ msgstr "Фирма срока оплаты"
 
 #. module: workset_client
 #: model:ir.model.fields,help:workset_client.field_workset_client_terms__company_note
-msgid "Строк оплати контакту залежить від фірми: вікно правит строк поточної фірми"
-msgstr "Срок оплаты контакта зависит от фирмы: окно правит срок текущей фирмы"
+msgid "Строк оплати контакту залежить від фірми: вікно змінює строк поточної фірми"
+msgstr "Срок оплаты контакта зависит от фирмы: окно меняет срок текущей фирмы"
 
 #. module: workset_client
 #: model:ir.model.fields,field_description:workset_client.field_workset_client_terms__sign_id

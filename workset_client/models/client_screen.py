@@ -154,7 +154,8 @@ class ResPartner(models.Model):
         rules = [{'id': r.id, 'line_id': r.line_id.id, 'customer_id': pcalc.cust_of(r.customer_id), 'date_from': pcalc.iso(r.date_from)}
                  for r in rule_recs]
         default_min = rcalc.parse_float(self.env['ir.config_parameter'].sudo().get_param(rcalc.P_MIN_SHARE) or '')
-        ms = calc.min_share(rules, {r.id: r.min_share for r in rule_recs}, line.id, cust.id, today, default_min)
+        ms = calc.min_share(rules, {r.id: r.min_share for r in rule_recs}, line.id, cust.id, today, default_min,
+                           line.min_share if line else 0.0)
         rr = Rule.browse(ms['rule_id']) if ms['rule_id'] else Rule
         rule_open = self._workset_client_rule_open({'model': 'rate_rule', 'id': rr.id}, line, cust, lang) if line else False
         withdraw = cust.workset_client_withdraw_pct
@@ -229,7 +230,7 @@ class ResPartner(models.Model):
                 'lines': [{'id': x.id, 'name': x.display_name,
                            'open': self._workset_client_open(calc.t('o_line', lang) % x.display_name, [('id', '=', x.id)], LINE, x.id)}
                           for x in line],
-                'line_id': line.id or False, 'more': max(len(lines) - 1, 0), 'more_text': calc.t('more_lines', lang) % (len(lines) - 1) if len(lines) > 1 else '',
+                'line_id': line.id or False, 'more': max(len(lines) - 1, 0), 'more_text': calc.more_lines_text(len(lines) - 1, lang) if len(lines) > 1 else '',
                 'pick': [{'id': x.id, 'name': x.display_name, 'on': x.id == line.id} for x in lines] if len(lines) > 1 else [],
                 'projects': names[:PROJECTS_MAX], 'projects_more': max(len(names) - PROJECTS_MAX, 0),
                 'projects_open': bool(projects) and self._workset_client_open(calc.t('o_projects', lang) % name,

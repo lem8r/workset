@@ -344,6 +344,13 @@ class TestWorksetClient(TransactionCase):
         a = self.Partner.workset_client_card(self.cust.id)['agent']
         self.assertIn('in_rates', a)
         self.assertFalse(a['in_rates'], 'частка посередника в ставках нуль — рядка немає')
+        # ненульовий: поле «Посередник» ставки пише «Ставки» (readonly, ланцюжок) — для проби ставимо SQL-ом, без перерахунку ланцюжка
+        self.env.cr.execute('UPDATE workset_rate SET agent_client_share = 1.5 WHERE id = %s', [self.r1.id])
+        self.r1.invalidate_recordset(['agent_client_share'])
+        a = self.Partner.workset_client_card(self.cust.id)['agent']
+        self.assertEqual(a['in_rates'], {'min': 1.5, 'max': 1.5, 'n': 1}, 'посередник у ставках: лише додатні, одна ставка з двох')
+        self.assertEqual(a['in_rates_open']['model'], 'workset.rate')
+        self.assertIn(('agent_client_share', '>', 0), a['in_rates_open']['domain'])
 
     # п. 6, 7: кілька ліній і «мінімум» за замовчуванням
     def test_multiple_lines_pick_and_min_default(self):
@@ -409,3 +416,35 @@ class TestWorksetClient(TransactionCase):
         dst = self.Partner.create({'name': 'Merge dst K1b', 'is_company': True})
         src.sudo().write({'workset_client_terms_note': 'K1-from-src'})
         self._as(Wiz, clerk)._merge([src.id, dst.id], dst.with_user(clerk), extra_checks=False)  # без AccessError на workset_client_*
+        self.assertFalse(src.exists(), 'слияние выполнено: источник удалён')
+        # _update_values (Odoo 19) переносит только поля с copy=True, а наши — copy=False: поддельное «Перевірено» слиянием в настоящего
+        # заказчика не попадёт (К1в п. 8: «значение перешло» невозможно по устройству — проверяем, что и не перешло)
+        self.assertFalse(dst.sudo().workset_client_terms_note)
+
+    # К1в п. 1: свої поля не підставляються default_<поле> з контексту / ir.default (create, name_create, copy)
+    def test_forged_defaults_rejected_for_non_editor(self):
+        clerk = self._user('ws_client_forge_clerk', 'base.group_user,base.group_partner_manager')
+        Clerk = self._as(self.Partner, clerk)
+        forged = (('default_workset_client_checked_date', '2030-01-01'), ('default_workset_client_checked_by_id', clerk.id),
+                  ('default_workset_client_contract_no', 'K1-FORGED'))
+        # контроль: без default_* ті самі дії не-редактору дозволені — отже AccessError нижче саме від перевірки модуля
+        Clerk.create({'name': 'Forged K1v control'})
+        Clerk.name_create('Forged K1v control name')
+        self._as(self.cust, clerk).copy()
+        for key, value in forged:
+            ctx = {key: value}
+            with self.assertRaises(AccessError, msg='create ' + key):
+                Clerk.with_context(**ctx).create({'name': 'Forged K1v'})
+            with self.assertRaises(AccessError, msg='name_create ' + key):
+                Clerk.with_context(**ctx).name_create('Forged K1v name')
+            with self.assertRaises(AccessError, msg='copy ' + key):
+                self._as(self.cust, clerk).with_context(**ctx).copy()
+        self.env['ir.default'].sudo().set('res.partner', 'workset_client_contract_no', 'K1-IRD')
+        with self.assertRaises(AccessError, msg='ir.default'):
+            Clerk.create({'name': 'Forged K1v ir.default'})
+        self.assertFalse(self.Partner.sudo().search([('name', 'like', 'Forged K1v'), ('workset_client_contract_no', '!=', False)]),
+                         'поддельных контактов не осталось')
+        # редактору те самі default_* дозволені
+        editor = self._user('ws_client_forge_editor', 'base.group_user,workset_client.group_editor,base.group_partner_manager')
+        rec = self._as(self.Partner, editor).with_context(default_workset_client_checked_date='2030-01-01').create({'name': 'Forged K1v editor'})
+        self.assertEqual(str(rec.sudo().workset_client_checked_date), '2030-01-01')

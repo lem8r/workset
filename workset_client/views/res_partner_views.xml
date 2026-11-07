@@ -32,7 +32,8 @@
                 <field name="workset_client_has_contract" column_invisible="1"/>
                 <field name="workset_client_checked_date" column_invisible="1"/>
                 <field name="workset_client_has_term" column_invisible="1"/>
-                <field name="workset_client_no" string="№" widget="workset_client_rowno" width="40px"/>
+                <!-- «№» — номер рядка на екрані: переносний віджет «Прибутковості» 19.0.6 (workset_profit/static/src/js/row_number.js), серим -->
+                <field name="id" string="№" widget="workset_profit_row_number" readonly="1" width="50px"/>
                 <field name="name" string="Замовник"/>
                 <field name="workset_client_line_text" string="Лінія"/>
                 <field name="workset_client_rate_count" string="Ставок діє"/>
