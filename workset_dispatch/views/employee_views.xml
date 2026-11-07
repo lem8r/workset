@@ -15,7 +15,6 @@
                 <button name="workset_dispatch_open_pd" type="object" class="oe_stat_button" icon="fa-external-link" invisible="not workset_pd_url"
                         groups="hr_recruitment.group_hr_recruitment_user">
                     <div class="o_stat_info"><span class="o_stat_text">Угода Pipedrive</span></div>
-                    <field name="workset_pd_url" invisible="1"/>
                 </button>
             </xpath>
         </field>

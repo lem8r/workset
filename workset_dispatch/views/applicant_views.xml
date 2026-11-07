@@ -8,6 +8,8 @@
         <field name="arch" type="xml">
             <list string="Виїзди" create="0" sample="1" default_order="workset_departure_date desc, id desc"
                   decoration-muted="workset_state == 'cancel'">
+                <!-- «№» — номер рядка на екрані (правило власника 07.11), не id запису -->
+                <field name="id" string="№" widget="workset_dispatch_row_number" readonly="1" width="40px"/>
                 <field name="partner_name" string="Ім'я"/>
                 <field name="workset_departure_date" options="{'numeric': True}"/>
                 <field name="workset_customer_id" optional="show"/>
@@ -67,7 +69,6 @@
                 </header>
                 <sheet>
                     <widget name="web_ribbon" title="В архіві" bg_color="text-bg-danger" invisible="active"/>
-                    <field name="active" invisible="1"/>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_employee" type="object" class="oe_stat_button" icon="fa-id-card-o" invisible="not employee_id">
                             <div class="o_stat_info"><span class="o_stat_text">Картка</span></div>
@@ -84,7 +85,6 @@
                     <div class="d-flex align-items-baseline gap-2 flex-wrap fw-semibold text-warning my-2" role="alert" invisible="not workset_name_check">
                         <div><i class="fa fa-exclamation-circle me-1" role="img" title="Звірити"/></div>
                         <div>Ім'я записано з кирилиці — звірте з паспортом</div>
-                        <field name="workset_name_check" invisible="1"/>
                     </div>
                     <group invisible="workset_state != 'check_dup'" string="Схожі картки — вирішує Оля">
                         <!-- Текстом (через sudo): картки інших фірм у many2many відсіюються за вибраними фірмами, а людині треба бачити всі -->
