@@ -264,6 +264,11 @@ export class FinanceOwner extends Component {
     }
 
     /** Плитка: чистий прибуток — кольором бренду (нижче нуля — червоним); решта — кольором тексту (мінус у «Україні» й частках — норма). */
+    // рядки драбини: «1г Дохід без аналітики» з нулями за весь рік не показуємо — порожній рядок з прочерків (правило R14)
+    ladderRows(rows) {
+        return (rows || []).filter((r) => r.key !== "s1g_no_analytic" || r.cells.some((c) => c.value));
+    }
+
     tileCls(tile) {
         if (tile.key !== "s4_net") {
             return "";
